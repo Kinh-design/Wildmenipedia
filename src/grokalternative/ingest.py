@@ -13,7 +13,9 @@ def ingest_labels(kg: KG, items: List[Dict[str, str]]) -> int:
         label = it.get("label", "").strip()
         if not sid or not label:
             continue
-        # Store as a self edge with label metadata, as minimal representation
+        # Store node label property and an auxiliary edge
+        kg.set_label(sid, label)
+        # Keep an edge to preserve prior behavior/minimal provenance
         kg.upsert_triple(sid, "has_label", sid, {"label": label})
         count += 1
     return count
@@ -35,6 +37,10 @@ def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int
         triples_raw = sparql.wikidata_triples(top["id"], limit=200)
         triples = sparql.extract_wikidata_triples(top["id"], triples_raw)
         total += ingest_triples(backend, triples)
+        # with qualifiers
+        stmts_raw = sparql.wikidata_statements_with_qualifiers(top["id"], limit=300)
+        stmts = sparql.extract_wikidata_triples_with_qualifiers(top["id"], stmts_raw)
+        total += ingest_triples(backend, stmts)
     return total
 
 
@@ -69,6 +75,14 @@ def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
             meta["predicate_label"] = t["predicate_label"]
         if "object_label" in t and t["object_label"]:
             meta["object_label"] = t["object_label"]
+        if "qualifiers" in t and t["qualifiers"]:
+            # store qualifiers as JSON string to keep schema simple
+            try:
+                import json
+
+                meta["qualifiers"] = json.dumps(t["qualifiers"]) 
+            except Exception:
+                pass
         kg.upsert_triple(s, p, o, meta)
         count += 1
     return count

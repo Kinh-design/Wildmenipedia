@@ -143,6 +143,32 @@ def wikidata_triples(qid_or_uri: str, limit: int = 200) -> Dict[str, Any]:
     return query_sparql(WIKIDATA_SPARQL, wikidata_triples_query(qid_or_uri, limit))
 
 
+def wikidata_statements_with_qualifiers_query(qid_or_uri: str, limit: int = 300) -> str:
+    qid = _qid_from_uri(qid_or_uri)
+    return f"""
+    PREFIX wd: <http://www.wikidata.org/entity/>
+    PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+    PREFIX p: <http://www.wikidata.org/prop/>
+    PREFIX ps: <http://www.wikidata.org/prop/statement/>
+    PREFIX pq: <http://www.wikidata.org/prop/qualifier/>
+    PREFIX wikibase: <http://wikiba.se/ontology#>
+    SELECT ?p ?pLabel ?ps ?psLabel ?qualPred ?qualPredLabel ?qual ?qualLabel WHERE {{
+      wd:{qid} ?p ?statement .
+      ?p wikibase:statementProperty ?pPS .
+      ?statement ?pPS ?ps .
+      OPTIONAL {{
+        ?statement ?qualPred ?qual .
+        FILTER(STRSTARTS(STR(?qualPred), STR(pq:)))
+      }}
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+    }} LIMIT {limit}
+    """.strip()
+
+
+def wikidata_statements_with_qualifiers(qid_or_uri: str, limit: int = 300) -> Dict[str, Any]:
+    return query_sparql(WIKIDATA_SPARQL, wikidata_statements_with_qualifiers_query(qid_or_uri, limit))
+
+
 def extract_wikidata_triples(subject_qid_or_uri: str, data: Dict[str, Any]) -> List[Dict[str, str]]:
     subject = subject_qid_or_uri if subject_qid_or_uri.startswith("http") else f"http://www.wikidata.org/entity/{_qid_from_uri(subject_qid_or_uri)}"
     out: List[Dict[str, str]] = []
@@ -159,6 +185,44 @@ def extract_wikidata_triples(subject_qid_or_uri: str, data: Dict[str, Any]) -> L
                 "predicate_label": p_label,
                 "object_label": o_label,
             })
+    return out
+
+
+def extract_wikidata_triples_with_qualifiers(subject_qid_or_uri: str, data: Dict[str, Any]) -> List[Dict[str, str]]:
+    subject = subject_qid_or_uri if subject_qid_or_uri.startswith("http") else f"http://www.wikidata.org/entity/{_qid_from_uri(subject_qid_or_uri)}"
+    out: List[Dict[str, str]] = []
+    # Aggregate qualifiers per (p, ps)
+    agg: Dict[tuple[str, str], Dict[str, Any]] = {}
+    for b in data.get("results", {}).get("bindings", []):
+        p = b.get("p", {}).get("value", "")
+        ps_val = b.get("ps", {}).get("value", "")
+        p_label = b.get("pLabel", {}).get("value", "")
+        ps_label = b.get("psLabel", {}).get("value", "")
+        if not p or not ps_val:
+            continue
+        key = (p, ps_val)
+        rec = agg.setdefault(key, {
+            "subject": subject,
+            "predicate": p,
+            "object": ps_val,
+            "predicate_label": p_label,
+            "object_label": ps_label,
+            "qualifiers": [],
+        })
+        qpred = b.get("qualPred", {}).get("value", "")
+        qpred_label = b.get("qualPredLabel", {}).get("value", "")
+        qval = b.get("qual", {}).get("value", "")
+        qval_label = b.get("qualLabel", {}).get("value", "")
+        if qpred and qval:
+            rec["qualifiers"].append({
+                "predicate": qpred,
+                "predicate_label": qpred_label,
+                "object": qval,
+                "object_label": qval_label,
+            })
+    # Flatten
+    for _, v in agg.items():
+        out.append(v)
     return out
 
 

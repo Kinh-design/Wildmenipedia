@@ -2,6 +2,7 @@ from grokalternative.connectors.sparql import (
     extract_dbpedia_triples,
     extract_labels_from_results,
     extract_wikidata_triples,
+    extract_wikidata_triples_with_qualifiers,
     select_best_candidate,
 )
 
@@ -79,3 +80,31 @@ def test_select_best_candidate_prefers_exact_match():
     ]
     best = select_best_candidate(term, items)
     assert best and best["id"].endswith("/Albert_Einstein")
+
+
+def test_extract_wikidata_triples_with_qualifiers_minimal():
+    subject = "http://www.wikidata.org/entity/Q42"
+    data = {
+        "results": {
+            "bindings": [
+                {
+                    "p": {"type": "uri", "value": "http://www.wikidata.org/prop/P26"},
+                    "pLabel": {"type": "literal", "value": "spouse"},
+                    "ps": {"type": "uri", "value": "http://www.wikidata.org/entity/Q146236"},
+                    "psLabel": {"type": "literal", "value": "Jane Belson"},
+                    "qualPred": {"type": "uri", "value": "http://www.wikidata.org/prop/qualifier/P580"},
+                    "qualPredLabel": {"type": "literal", "value": "start time"},
+                    "qual": {"type": "literal", "value": "1991-11-25"},
+                    "qualLabel": {"type": "literal", "value": "1991-11-25"},
+                }
+            ]
+        }
+    }
+    triples = extract_wikidata_triples_with_qualifiers(subject, data)
+    assert len(triples) == 1
+    t = triples[0]
+    assert t["predicate"].endswith("/P26")
+    assert t["object"].endswith("/Q146236")
+    assert t["predicate_label"] == "spouse"
+    assert t["object_label"] == "Jane Belson"
+    assert t["qualifiers"] and t["qualifiers"][0]["predicate"].endswith("/P580")

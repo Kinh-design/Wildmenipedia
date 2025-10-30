@@ -52,6 +52,7 @@ class KG:
         """
         stmts = [
             "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
+            "CREATE INDEX entity_name_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
             "CREATE INDEX rel_pred_idx IF NOT EXISTS FOR ()-[r:REL]-() ON (r.pred)",
         ]
         try:
@@ -61,6 +62,11 @@ class KG:
         except Exception:
             # best-effort; ignore if not permitted
             pass
+
+    def set_label(self, entity_id: str, label: str) -> None:
+        query = "MERGE (e:Entity {id:$id}) SET e.name = $label"
+        with self.driver.session() as sess:
+            sess.run(query, id=entity_id, label=label)
 
 
 @dataclass
