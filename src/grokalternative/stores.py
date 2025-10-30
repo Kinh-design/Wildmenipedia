@@ -35,6 +35,15 @@ class KG:
         with self.driver.session() as sess:
             sess.run(query, s=s, p=p, o=o, meta=meta or {})
 
+    def neighbors(self, node_id: str, limit: int = 10) -> list[dict[str, Any]]:
+        query = (
+            "MATCH (s:Entity {id:$id})-[r:REL]->(o:Entity) "
+            "RETURN s.id AS s, r.pred AS p, o.id AS o, r AS meta LIMIT $limit"
+        )
+        with self.driver.session() as sess:
+            res = sess.run(query, id=node_id, limit=limit)
+            return [dict(record) for record in res]
+
 
 @dataclass
 class VS:
