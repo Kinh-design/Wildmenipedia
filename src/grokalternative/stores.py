@@ -79,6 +79,29 @@ class KG:
         except Exception:
             return {}
 
+    def get_entity_names(self, entity_ids: list[str]) -> Dict[str, Optional[str]]:
+        """Batch-resolve names for a list of entity IDs.
+
+        Returns a mapping id -> name (or None if missing).
+        """
+        if not entity_ids:
+            return {}
+        query = (
+            "UNWIND $ids AS eid "
+            "MATCH (e:Entity {id:eid}) "
+            "RETURN eid AS id, e.name AS name"
+        )
+        out: Dict[str, Optional[str]] = {}
+        try:
+            with self.driver.session() as sess:
+                res = sess.run(query, ids=entity_ids)
+                for rec in res:
+                    d = dict(rec)
+                    out[str(d.get("id"))] = d.get("name")
+        except Exception:
+            pass
+        return out
+
     def ensure_schema(self) -> None:
         """Create minimal schema: unique id on :Entity and index on REL.pred.
 

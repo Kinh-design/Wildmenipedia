@@ -128,26 +128,27 @@ def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> 
         neighbors = []
         total = 0
 
-    # Related entities (top unique objects/subjects from neighbors)
-    related: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    # Related entities via batched name lookup
+    rel_ids: list[str] = []
+    seen: set[str] = set([id])
     for n in neighbors:
         for eid in [n.get("o"), n.get("s")]:
-            if not isinstance(eid, str) or eid == id:
-                continue
-            if eid in seen:
+            if not isinstance(eid, str) or eid in seen:
                 continue
             seen.add(eid)
-            # best-effort name lookup
-            try:
-                eprops = kg.get_entity_props(eid)
-            except Exception:
-                eprops = {}
-            related.append({"id": eid, "name": eprops.get("name") or eid})
-            if len(related) >= 10:
+            rel_ids.append(eid)
+            if len(rel_ids) >= 20:
                 break
-        if len(related) >= 10:
+        if len(rel_ids) >= 20:
             break
+    name_map: Dict[str, Any] = {}
+    try:
+        name_map = kg.get_entity_names(rel_ids)
+    except Exception:
+        name_map = {}
+    related: list[dict[str, Any]] = [
+        {"id": eid, "name": (name_map.get(eid) or eid)} for eid in rel_ids[:10]
+    ]
 
     # Recommended queries
     name = props.get("name") or id
