@@ -106,11 +106,15 @@
             <div></div>
             <div>
               {% if neighbors_prev %}<a class="btn secondary" href="{{ neighbors_prev }}">Prev</a>{% endif %}
-              {% for i in range(1, (neighbors_pages or 1) + 1) %}
-                {% if i <= 10 and i != (neighbors_page or 1) %}
-                  <a class="btn secondary" href="/entity?id={{ id|urlencode }}&page={{ i }}&page_size={{ neighbors_page_size or 15 }}">{{ i }}</a>
-                {% elif i == (neighbors_page or 1) %}
-                  <span class="chip">{{ i }}</span>
+              {% for it in neighbors_links or [] %}
+                {% if it.ellipsis %}
+                  <span class="chip">…</span>
+                {% else %}
+                  {% if it.active %}
+                    <span class="chip">{{ it.label }}</span>
+                  {% else %}
+                    <a class="btn secondary" href="{{ it.href }}">{{ it.label }}</a>
+                  {% endif %}
                 {% endif %}
               {% endfor %}
               {% if neighbors_next %}<a class="btn secondary" href="{{ neighbors_next }}" style="margin-left:6px;">Next</a>{% endif %}

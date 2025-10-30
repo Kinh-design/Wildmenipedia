@@ -88,6 +88,23 @@ def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15)
     def qp(new_page: int) -> str:
         return f"/search?{urlencode({'q': q, 'page': new_page, 'page_size': ps})}"
 
+    # Build numbered pagination with ellipsis windowing (especially for 100+ pages)
+    pages_links: list[dict[str, Any]] = []
+    if page_count <= 10:
+        for i in range(1, page_count + 1):
+            pages_links.append({"label": i, "href": qp(i), "active": (i == p)})
+    else:
+        window = 2
+        base_set = {1, 2, page_count - 1, page_count}
+        dynamic = set(range(max(1, p - window), min(page_count, p + window) + 1))
+        show = sorted(base_set.union(dynamic))
+        last = None
+        for i in show:
+            if last is not None and i - last > 1:
+                pages_links.append({"ellipsis": True})
+            pages_links.append({"label": i, "href": qp(i), "active": (i == p)})
+            last = i
+
     return templates.TemplateResponse(
         "index.html",
         {
@@ -104,6 +121,7 @@ def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15)
             "facts_page_size": ps,
             "facts_prev": qp(p-1) if p > 1 else None,
             "facts_next": qp(p+1) if p < page_count else None,
+            "facts_links": pages_links,
         },
     )
 
@@ -173,6 +191,23 @@ def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> 
     def qp(new_page: int) -> str:
         return f"/entity?{urlencode({'id': id, 'page': new_page, 'page_size': ps})}"
 
+    # Numbered pagination with ellipsis windowing
+    neighbors_links: list[dict[str, Any]] = []
+    if page_count <= 10:
+        for i in range(1, page_count + 1):
+            neighbors_links.append({"label": i, "href": qp(i), "active": (i == p)})
+    else:
+        window = 2
+        base_set = {1, 2, page_count - 1, page_count}
+        dynamic = set(range(max(1, p - window), min(page_count, p + window) + 1))
+        show = sorted(base_set.union(dynamic))
+        last = None
+        for i in show:
+            if last is not None and i - last > 1:
+                neighbors_links.append({"ellipsis": True})
+            neighbors_links.append({"label": i, "href": qp(i), "active": (i == p)})
+            last = i
+
     return templates.TemplateResponse(
         "entity.html",
         {
@@ -189,6 +224,7 @@ def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> 
             "neighbors_next": qp(p+1) if p < page_count else None,
             "related": related,
             "recommended": rec_q,
+            "neighbors_links": neighbors_links,
         },
     )
 

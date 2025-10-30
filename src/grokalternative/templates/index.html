@@ -80,6 +80,12 @@
 
       <form class="search" action="/search" method="get">
         <input type="text" name="q" placeholder="Ask about an entity, concept, or relationship…" value="{{ q }}" />
+        <label class="muted" style="align-self:center;">Page size</label>
+        <select name="page_size" style="background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;" onchange="this.form.submit()">
+          {% for sz in [10,15,25,50] %}
+            <option value="{{ sz }}" {% if (facts_page_size or 15) == sz %}selected{% endif %}>{{ sz }}</option>
+          {% endfor %}
+        </select>
         <button class="btn" type="submit">Ask</button>
         <button class="btn secondary" type="button" onclick="enrich('{{ q }}')">Enrich</button>
       </form>
@@ -130,11 +136,15 @@
           <div class="muted">{{ facts_total or 0 }} facts • page {{ facts_page or 1 }} of {{ facts_pages or 1 }}</div>
           <div>
             {% if facts_prev %}<a class="btn secondary" href="{{ facts_prev }}">Prev</a>{% endif %}
-            {% for i in range(1, (facts_pages or 1) + 1) %}
-              {% if i <= 10 and i != (facts_page or 1) %}
-                <a class="btn secondary" href="/search?q={{ q|urlencode }}&page={{ i }}&page_size={{ facts_page_size or 15 }}">{{ i }}</a>
-              {% elif i == (facts_page or 1) %}
-                <span class="chip">{{ i }}</span>
+            {% for it in facts_links or [] %}
+              {% if it.ellipsis %}
+                <span class="chip">…</span>
+              {% else %}
+                {% if it.active %}
+                  <span class="chip">{{ it.label }}</span>
+                {% else %}
+                  <a class="btn secondary" href="{{ it.href }}">{{ it.label }}</a>
+                {% endif %}
               {% endif %}
             {% endfor %}
             {% if facts_next %}<a class="btn secondary" href="{{ facts_next }}" style="margin-left:6px;">Next</a>{% endif %}
