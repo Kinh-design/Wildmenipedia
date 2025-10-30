@@ -1,7 +1,10 @@
 import hashlib
+from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from .agents.orchestrator import run_pipeline
 from .embeddings import Embedder
@@ -11,6 +14,8 @@ from .settings import get_settings
 from .stores import KG, VS
 
 app = FastAPI(title="Wildmenipedia API", version="0.1.0")
+
+templates = Jinja2Templates(directory=str((Path(__file__).parent / "templates").resolve()))
 
 
 @app.get("/health")
@@ -29,6 +34,53 @@ def ask(q: str) -> dict:
     out = run_pipeline(q)
     hybrid = hybrid_answer(q)
     return {"ok": True, **out, "retrieval": hybrid}
+
+
+# ---------- UI (Grokipedia-like) ----------
+@app.get("/", response_class=HTMLResponse)
+def ui_home(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "q": "",
+            "summary": None,
+            "facts": [],
+            "vector_hits": [],
+            "entities": [],
+        },
+    )
+
+
+@app.get("/search", response_class=HTMLResponse)
+def ui_search(request: Request, q: str = "") -> HTMLResponse:
+    q = (q or "").strip()
+    if not q:
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "q": "",
+                "summary": None,
+                "facts": [],
+                "vector_hits": [],
+                "entities": [],
+            },
+        )
+    pipe = run_pipeline(q)
+    hybrid = hybrid_answer(q)
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "q": q,
+            "summary": (hybrid or {}).get("answer"),
+            "facts": (hybrid or {}).get("facts", [])[:30],
+            "vector_hits": (hybrid or {}).get("vector_hits", [])[:10],
+            "entities": (hybrid or {}).get("selected_entities", []),
+            "pipeline": pipe,
+        },
+    )
 
 
 @app.post("/ingest")

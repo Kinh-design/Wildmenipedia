@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wildmenipedia</title>
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #0f141a;
+        --muted: #9aa4af;
+        --text: #e6edf3;
+        --accent: #00e5ff;
+        --chip: #19212a;
+        --border: #1b2733;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font: 14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      }
+      .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+      .brand { display: flex; align-items: center; gap: 10px; }
+      .logo {
+        width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg,#00e5ff,#8a2be2);
+        box-shadow: 0 0 24px rgba(0,229,255,0.35);
+      }
+      .title { font-weight: 700; letter-spacing: 0.3px; }
+      .muted { color: var(--muted); }
+      .search {
+        margin: 24px 0 12px; background: var(--panel); border: 1px solid var(--border);
+        border-radius: 12px; display: flex; padding: 10px; gap: 8px;
+      }
+      .search input[type="text"]{
+        flex: 1; background: transparent; border: none; outline: none; color: var(--text);
+        font-size: 16px; padding: 8px;
+      }
+      .btn {
+        background: var(--accent); color: #001015; border: none; padding: 10px 14px;
+        border-radius: 10px; font-weight: 600; cursor: pointer;
+      }
+      .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      .answer { font-size: 16px; }
+      .chip { display: inline-block; padding: 3px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); font-size: 12px; margin-right: 6px; }
+      .fact { border-top: 1px solid var(--border); padding: 10px 0; }
+      .fact:first-child { border-top: 0; }
+      .uri { color: var(--muted); font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size: 12px; }
+      .pred { color: var(--accent); font-weight: 600; }
+      .hits li { margin: 6px 0; }
+      .footer { text-align: center; color: var(--muted); margin: 24px 0; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="title">Wildmenipedia</div>
+          <div class="muted">An agentic, graph-augmented Grokipedia-like experience</div>
+        </div>
+      </div>
+
+      <form class="search" action="/search" method="get">
+        <input type="text" name="q" placeholder="Ask about an entity, concept, or relationship…" value="{{ q }}" />
+        <button class="btn" type="submit">Ask</button>
+      </form>
+
+      {% if summary %}
+      <div class="grid">
+        <div class="card">
+          <div class="muted">Answer</div>
+          <div class="answer" style="margin-top:8px;">{{ summary }}</div>
+          {% if entities %}
+          <div style="margin-top:10px;">
+            {% for e in entities %}
+            <span class="chip">{{ e }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="card">
+          <div class="muted">Vector hits</div>
+          <ul class="hits">
+            {% for h in vector_hits %}
+            <li>
+              <span class="chip">{{ '%.3f' % (h.score or 0.0) }}</span>
+              <span class="uri">{{ (h.payload or {}).get('label') or (h.payload or {}).get('alias') or (h.payload or {}).get('id') }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="muted">Supporting facts</div>
+        {% for f in facts %}
+        <div class="fact">
+          {% set m = f.meta or {} %}
+          <div>
+            <span class="chip">score {{ '%.2f' % (f.score or 0.0) }}</span>
+            {% if m.rank %}<span class="chip">rank {{ m.rank }}</span>{% endif %}
+            {% if m.pred_code %}<span class="chip">{{ m.pred_code }}</span>{% endif %}
+          </div>
+          <div><span class="uri">{{ f.subject }}</span> <span class="pred">— {{ f.predicate }}</span> <span class="uri">→ {{ f.object }}</span></div>
+          {% if m.object_label %}
+          <div class="muted">object label: {{ m.object_label }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="muted" style="margin-top:12px;">Try “Who is Douglas Adams?” or “What is Neo4j?”</div>
+      {% endif %}
+
+      <div class="footer">Droid-assisted • Hybrid GraphRAG + VectorRAG</div>
+    </div>
+  </body>
+  </html>
