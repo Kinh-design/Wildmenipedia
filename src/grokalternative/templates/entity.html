@@ -53,7 +53,7 @@
   </head>
   <body data-theme="dark">
     <div class="container">
-      <div class="crumbs"><a href="/">Home</a> / <a href="/search?q={{ props.name or id }}">Search</a> / <span>{{ props.name or id }}</span>
+      <div class="crumbs"><a href="/">Home</a> / <a href="/search?q={{ props.name or id }}&page_size={{ neighbors_page_size or 15 }}">Search</a> / <span>{{ props.name or id }}</span>
         <label class="theme"><input id="theme" type="checkbox" onchange="toggleTheme(this)" checked> Dark</label>
       </div>
 
@@ -97,8 +97,8 @@
             </div>
             {% if m.object_label %}<div class="muted">object label: {{ m.object_label }}</div>{% endif %}
             <div style="margin-top:4px;">
-              <a href="/entity?id={{ n.s|urlencode }}">open subject</a> ·
-              <a href="/entity?id={{ n.o|urlencode }}">open object</a>
+              <a href="/entity?id={{ n.s|urlencode }}&page_size={{ neighbors_page_size or 15 }}">open subject</a> ·
+              <a href="/entity?id={{ n.o|urlencode }}&page_size={{ neighbors_page_size or 15 }}">open object</a>
             </div>
           </div>
           {% endfor %}
@@ -132,7 +132,7 @@
             <div style="margin-top:6px;">
               {% for r in related %}
               <div style="margin:4px 0;">
-                <a href="/entity?id={{ r.id|urlencode }}">{{ r.name }}</a>
+                <a href="/entity?id={{ r.id|urlencode }}&page_size={{ neighbors_page_size or 15 }}">{{ r.name }}</a>
                 <div class="uri">{{ r.id }}</div>
               </div>
               {% endfor %}
@@ -144,7 +144,7 @@
             <div class="chip">Recommended queries</div>
             <div style="margin-top:6px;">
               {% for rq in recommended %}
-              <div style="margin:4px 0;"><a href="/search?q={{ rq|urlencode }}">{{ rq }}</a></div>
+              <div style="margin:4px 0;"><a href="/search?q={{ rq|urlencode }}&page_size={{ neighbors_page_size or 15 }}">{{ rq }}</a></div>
               {% endfor %}
             </div>
           </div>
