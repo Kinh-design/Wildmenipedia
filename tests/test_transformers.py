@@ -2,6 +2,7 @@ from grokalternative.connectors.sparql import (
     extract_dbpedia_triples,
     extract_labels_from_results,
     extract_wikidata_triples,
+    select_best_candidate,
 )
 
 
@@ -67,3 +68,14 @@ def test_extract_dbpedia_triples_minimal():
     assert triples[0]["predicate"].endswith("/birthPlace")
     assert triples[0]["object"].endswith("/Ulm")
     assert triples[0]["object_label"] == "Ulm"
+
+
+def test_select_best_candidate_prefers_exact_match():
+    term = "Albert Einstein"
+    items = [
+        {"id": "http://dbpedia.org/resource/Einstein_(crater)", "label": "Einstein (crater)"},
+        {"id": "http://dbpedia.org/resource/Albert_Einstein", "label": "Albert Einstein"},
+        {"id": "http://dbpedia.org/resource/Einstein", "label": "Einstein"},
+    ]
+    best = select_best_candidate(term, items)
+    assert best and best["id"].endswith("/Albert_Einstein")

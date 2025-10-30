@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -68,6 +68,51 @@ def wikidata_top_hit(term: str) -> Optional[Dict[str, str]]:
     """Return top candidate {id,label} from Wikidata search, if any."""
     items = extract_labels_from_results(wikidata_search(term, limit=1))
     return items[0] if items else None
+
+
+def _score_candidate(term: str, label: str, id_value: str) -> Tuple[int, int]:
+    """Heuristic score for candidate selection; higher is better.
+
+    Returns (score, tie_breaker) where tie_breaker lower is better.
+    """
+    t = term.strip().lower()
+    label_norm = label.strip().lower()
+    score = 0
+    if label_norm == t:
+        score += 100
+    elif label_norm.startswith(t):
+        score += 60
+    elif t in label_norm:
+        score += 30
+    # Prefer canonical Wikidata/DBpedia URIs
+    if "wikidata.org/entity/" in id_value or "dbpedia.org/resource/" in id_value:
+        score += 5
+    # Shorter labels tend to be more canonical
+    tie = abs(len(label) - len(term))
+    return score, tie
+
+
+def select_best_candidate(term: str, items: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    best: Optional[Dict[str, str]] = None
+    best_score: Tuple[int, int] = (-1, 10**9)
+    for it in items:
+        lab = it.get("label", "")
+        idv = it.get("id", "")
+        sc = _score_candidate(term, lab, idv)
+        if sc > best_score:
+            best_score = sc
+            best = it
+    return best
+
+
+def wikidata_resolve(term: str, limit: int = 10) -> Optional[Dict[str, str]]:
+    items = extract_labels_from_results(wikidata_search(term, limit=limit))
+    return select_best_candidate(term, items)
+
+
+def dbpedia_resolve(term: str, limit: int = 10) -> Optional[Dict[str, str]]:
+    items = extract_labels_from_results(dbpedia_search(term, limit=limit))
+    return select_best_candidate(term, items)
 
 
 # ---------------------------------------

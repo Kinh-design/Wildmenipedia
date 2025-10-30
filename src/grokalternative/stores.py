@@ -44,6 +44,24 @@ class KG:
             res = sess.run(query, id=node_id, limit=limit)
             return [dict(record) for record in res]
 
+    def ensure_schema(self) -> None:
+        """Create minimal schema: unique id on :Entity and index on REL.pred.
+
+        Safe to call multiple times; uses IF NOT EXISTS and swallows errors
+        to avoid failing when permissions are limited.
+        """
+        stmts = [
+            "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
+            "CREATE INDEX rel_pred_idx IF NOT EXISTS FOR ()-[r:REL]-() ON (r.pred)",
+        ]
+        try:
+            with self.driver.session() as sess:
+                for s in stmts:
+                    sess.run(s)
+        except Exception:
+            # best-effort; ignore if not permitted
+            pass
+
 
 @dataclass
 class VS:

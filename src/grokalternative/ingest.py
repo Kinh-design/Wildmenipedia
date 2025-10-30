@@ -21,12 +21,16 @@ def ingest_labels(kg: KG, items: List[Dict[str, str]]) -> int:
 
 def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int:
     backend = kg or KG.from_env()
+    try:
+        backend.ensure_schema()
+    except Exception:
+        pass
     # Labels
     data = sparql.wikidata_search(term, limit)
     items = sparql.extract_labels_from_results(data)
     total = ingest_labels(backend, items)
     # Entity resolution (top hit) + triples
-    top = sparql.wikidata_top_hit(term)
+    top = sparql.wikidata_resolve(term)
     if top:
         triples_raw = sparql.wikidata_triples(top["id"], limit=200)
         triples = sparql.extract_wikidata_triples(top["id"], triples_raw)
@@ -36,12 +40,16 @@ def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int
 
 def ingest_from_dbpedia(term: str, kg: KG | None = None, limit: int = 5) -> int:
     backend = kg or KG.from_env()
+    try:
+        backend.ensure_schema()
+    except Exception:
+        pass
     data = sparql.dbpedia_search(term, limit)
     items = sparql.extract_labels_from_results(data)
     total = ingest_labels(backend, items)
     # top-hit triples
-    if items:
-        top = items[0]
+    top = sparql.dbpedia_resolve(term) or (items[0] if items else None)
+    if top:
         triples_raw = sparql.dbpedia_triples(top["id"], limit=200)
         triples = sparql.extract_dbpedia_triples(top["id"], triples_raw)
         total += ingest_triples(backend, triples)
