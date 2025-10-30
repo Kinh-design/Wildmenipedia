@@ -45,6 +45,23 @@ class KG:
             res = sess.run(query, id=node_id, limit=limit)
             return [dict(record) for record in res]
 
+    def get_entity_props(self, entity_id: str) -> Dict[str, Any]:
+        """Return basic properties for an entity node: name and aliases.
+
+        If the node does not exist, returns an empty dict.
+        """
+        query = "MATCH (e:Entity {id:$id}) RETURN e.name AS name, e.aliases AS aliases LIMIT 1"
+        try:
+            with self.driver.session() as sess:
+                rec = sess.run(query, id=entity_id).single()
+                if not rec:
+                    return {}
+                name = rec.get("name")
+                aliases = rec.get("aliases") or []
+                return {"name": name, "aliases": aliases}
+        except Exception:
+            return {}
+
     def ensure_schema(self) -> None:
         """Create minimal schema: unique id on :Entity and index on REL.pred.
 
