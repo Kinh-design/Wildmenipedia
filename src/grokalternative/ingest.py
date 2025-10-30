@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Dict, List
 
 from .connectors import sparql
@@ -70,8 +71,36 @@ def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int
         try:
             aliases_raw = sparql.wikidata_aliases(top["id"], limit=100)
             aliases = sparql.extract_aliases(aliases_raw)
+            # Prepare vector backend
+            embedder: Embedder | None = None
+            vs: VS | None = None
+            try:
+                embedder = Embedder(dim=256)
+                vs = VS.from_env()
+                vs.ensure_collection(name="entities", dim=embedder.dim)
+            except Exception:
+                embedder = None
+                vs = None
             for a in aliases:
                 backend.add_alias(top["id"], a)
+                if embedder and vs:
+                    try:
+                        vec = embedder.embed(a)
+                        ah = hashlib.sha1(a.encode("utf-8")).hexdigest()[:12]
+                        point_id = f"{top['id']}#alias:{ah}"
+                        vs.upsert_point(
+                            collection="entities",
+                            point_id=point_id,
+                            vector=vec,
+                            payload={
+                                "id": top["id"],
+                                "alias": a,
+                                "is_alias": True,
+                                "source": "wikidata",
+                            },
+                        )
+                    except Exception:
+                        pass
         except Exception:
             pass
     return total
