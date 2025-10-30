@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from .agents.orchestrator import run_pipeline
 from .ingest import ingest_from_dbpedia, ingest_from_wikidata
-from .rag import graphrag_answer
+from .rag import graphrag_answer, hybrid_answer
 from .settings import get_settings
 
 app = FastAPI(title="Wildmenipedia API", version="0.1.0")
@@ -22,7 +22,8 @@ def health() -> dict:
 @app.get("/ask")
 def ask(q: str) -> dict:
     out = run_pipeline(q)
-    return {"ok": True, **out}
+    hybrid = hybrid_answer(q)
+    return {"ok": True, **out, "retrieval": hybrid}
 
 
 @app.post("/ingest")

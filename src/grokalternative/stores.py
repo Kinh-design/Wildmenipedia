@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from neo4j import Driver, GraphDatabase
 from qdrant_client import QdrantClient
+from qdrant_client.http import models as qm
 
 from .settings import get_settings
 
@@ -107,3 +108,34 @@ class VS:
         if self._client is None:
             self._client = QdrantClient(host=self.host, port=self.port)
         return self._client
+
+    # Vector utilities
+    def ensure_collection(self, name: str = "default", dim: int = 256, distance: str = "Cosine") -> None:
+        try:
+            self.client.get_collection(name)
+            return
+        except Exception:
+            pass
+        self.client.recreate_collection(
+            collection_name=name,
+            vectors_config=qm.VectorParams(size=dim, distance=getattr(qm.Distance, distance)),
+        )
+
+    def upsert_point(self, collection: str, point_id: str, vector: list[float], payload: Optional[dict[str, Any]] = None) -> None:
+        self.ensure_collection(collection, dim=len(vector))
+        self.client.upsert(
+            collection_name=collection,
+            points=[qm.PointStruct(id=point_id, vector=vector, payload=payload or {})],
+        )
+
+    def search(self, collection: str, vector: list[float], top_k: int = 5) -> list[dict[str, Any]]:
+        self.ensure_collection(collection, dim=len(vector))
+        res = self.client.search(collection_name=collection, query_vector=vector, limit=top_k)
+        out: list[dict[str, Any]] = []
+        for p in res:
+            out.append({
+                "id": getattr(p, "id", None),
+                "score": getattr(p, "score", None),
+                "payload": getattr(p, "payload", {}),
+            })
+        return out
