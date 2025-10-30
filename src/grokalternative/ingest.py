@@ -20,12 +20,47 @@ def ingest_labels(kg: KG, items: List[Dict[str, str]]) -> int:
 
 
 def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int:
+    backend = kg or KG.from_env()
+    # Labels
     data = sparql.wikidata_search(term, limit)
     items = sparql.extract_labels_from_results(data)
-    return ingest_labels(kg or KG.from_env(), items)
+    total = ingest_labels(backend, items)
+    # Entity resolution (top hit) + triples
+    top = sparql.wikidata_top_hit(term)
+    if top:
+        triples_raw = sparql.wikidata_triples(top["id"], limit=200)
+        triples = sparql.extract_wikidata_triples(top["id"], triples_raw)
+        total += ingest_triples(backend, triples)
+    return total
 
 
 def ingest_from_dbpedia(term: str, kg: KG | None = None, limit: int = 5) -> int:
+    backend = kg or KG.from_env()
     data = sparql.dbpedia_search(term, limit)
     items = sparql.extract_labels_from_results(data)
-    return ingest_labels(kg or KG.from_env(), items)
+    total = ingest_labels(backend, items)
+    # top-hit triples
+    if items:
+        top = items[0]
+        triples_raw = sparql.dbpedia_triples(top["id"], limit=200)
+        triples = sparql.extract_dbpedia_triples(top["id"], triples_raw)
+        total += ingest_triples(backend, triples)
+    return total
+
+
+def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
+    count = 0
+    for t in triples:
+        s = t.get("subject", "").strip()
+        p = t.get("predicate", "").strip()
+        o = t.get("object", "").strip()
+        if not s or not p or not o:
+            continue
+        meta = {}
+        if "predicate_label" in t and t["predicate_label"]:
+            meta["predicate_label"] = t["predicate_label"]
+        if "object_label" in t and t["object_label"]:
+            meta["object_label"] = t["object_label"]
+        kg.upsert_triple(s, p, o, meta)
+        count += 1
+    return count

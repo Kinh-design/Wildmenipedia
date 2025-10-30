@@ -1,4 +1,8 @@
-from grokalternative.connectors.sparql import extract_labels_from_results
+from grokalternative.connectors.sparql import (
+    extract_dbpedia_triples,
+    extract_labels_from_results,
+    extract_wikidata_triples,
+)
 
 
 def test_extract_labels_from_results_minimal():
@@ -19,3 +23,47 @@ def test_extract_labels_from_results_minimal():
     rows = extract_labels_from_results(data)
     assert {"id": "http://www.wikidata.org/entity/Q123", "label": "Sample"} in rows
     assert {"id": "http://dbpedia.org/resource/Sample", "label": "Sample DBpedia"} in rows
+
+
+def test_extract_wikidata_triples_minimal():
+    subject = "http://www.wikidata.org/entity/Q42"
+    data = {
+        "results": {
+            "bindings": [
+                {
+                    "p": {"type": "uri", "value": "http://www.wikidata.org/prop/direct/P31"},
+                    "pLabel": {"type": "literal", "value": "instance of"},
+                    "o": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5"},
+                    "oLabel": {"type": "literal", "value": "human"},
+                }
+            ]
+        }
+    }
+    triples = extract_wikidata_triples(subject, data)
+    assert len(triples) == 1
+    assert triples[0]["subject"] == subject
+    assert triples[0]["predicate"].endswith("/P31")
+    assert triples[0]["object"].endswith("/Q5")
+    assert triples[0]["predicate_label"] == "instance of"
+    assert triples[0]["object_label"] == "human"
+
+
+def test_extract_dbpedia_triples_minimal():
+    subject = "http://dbpedia.org/resource/Albert_Einstein"
+    data = {
+        "results": {
+            "bindings": [
+                {
+                    "p": {"type": "uri", "value": "http://dbpedia.org/ontology/birthPlace"},
+                    "o": {"type": "uri", "value": "http://dbpedia.org/resource/Ulm"},
+                    "oLabel": {"type": "literal", "value": "Ulm"},
+                }
+            ]
+        }
+    }
+    triples = extract_dbpedia_triples(subject, data)
+    assert len(triples) == 1
+    assert triples[0]["subject"] == subject
+    assert triples[0]["predicate"].endswith("/birthPlace")
+    assert triples[0]["object"].endswith("/Ulm")
+    assert triples[0]["object_label"] == "Ulm"
