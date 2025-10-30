@@ -5,14 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Wildmenipedia</title>
     <style>
-      :root {
-        --bg: #0b0f14;
-        --panel: #0f141a;
-        --muted: #9aa4af;
-        --text: #e6edf3;
-        --accent: #00e5ff;
-        --chip: #19212a;
-        --border: #1b2733;
+      :root { --accent:#00e5ff; }
+      body[data-theme="dark"]{
+        --bg:#0b0f14; --panel:#0f141a; --muted:#9aa4af; --text:#e6edf3; --chip:#19212a; --border:#1b2733;
+      }
+      body[data-theme="light"]{
+        --bg:#fbfbfc; --panel:#ffffff; --muted:#5f6b76; --text:#0f1419; --chip:#eef2f6; --border:#e5e9ef;
       }
       html, body { height: 100%; }
       body {
@@ -27,6 +25,7 @@
       }
       .title { font-weight: 700; letter-spacing: 0.3px; }
       .muted { color: var(--muted); }
+      .theme { margin-left:auto; color: var(--muted); font-size: 12px; }
       .search {
         margin: 24px 0 12px; background: var(--panel); border: 1px solid var(--border);
         border-radius: 12px; display: flex; padding: 10px; gap: 8px;
@@ -39,6 +38,7 @@
         background: var(--accent); color: #001015; border: none; padding: 10px 14px;
         border-radius: 10px; font-weight: 600; cursor: pointer;
       }
+      .btn.secondary { background: transparent; color: var(--text); border:1px solid var(--border); }
       .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
       .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
       .answer { font-size: 16px; }
@@ -50,8 +50,24 @@
       .hits li { margin: 6px 0; }
       .footer { text-align: center; color: var(--muted); margin: 24px 0; font-size: 12px; }
     </style>
+    <script>
+      (function(){
+        const pref = localStorage.getItem('theme') || 'dark';
+        document.addEventListener('DOMContentLoaded', ()=>{
+          document.body.dataset.theme = pref;
+          const t = document.getElementById('theme');
+          if (t) t.checked = pref === 'dark';
+        });
+        window.toggleTheme = function(cb){
+          const theme = cb.checked ? 'dark' : 'light';
+          document.body.dataset.theme = theme;
+          localStorage.setItem('theme', theme);
+        }
+      })();
+      async function enrich(q){ if(!q) return; try{ await fetch('/ingest?q='+encodeURIComponent(q), {method:'POST'}); location.href='/search?q='+encodeURIComponent(q);}catch(e){} }
+    </script>
   </head>
-  <body>
+  <body data-theme="dark">
     <div class="container">
       <div class="brand">
         <div class="logo"></div>
@@ -59,11 +75,13 @@
           <div class="title">Wildmenipedia</div>
           <div class="muted">An agentic, graph-augmented Grokipedia-like experience</div>
         </div>
+        <label class="theme"><input id="theme" type="checkbox" onchange="toggleTheme(this)" checked> Dark</label>
       </div>
 
       <form class="search" action="/search" method="get">
         <input type="text" name="q" placeholder="Ask about an entity, concept, or relationship…" value="{{ q }}" />
         <button class="btn" type="submit">Ask</button>
+        <button class="btn secondary" type="button" onclick="enrich('{{ q }}')">Enrich</button>
       </form>
 
       {% if summary %}
@@ -74,7 +92,7 @@
           {% if entities %}
           <div style="margin-top:10px;">
             {% for e in entities %}
-            <span class="chip">{{ e }}</span>
+            <a class="chip" href="/entity?id={{ e|urlencode }}">{{ e }}</a>
             {% endfor %}
           </div>
           {% endif %}

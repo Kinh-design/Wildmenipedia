@@ -83,6 +83,31 @@ def ui_search(request: Request, q: str = "") -> HTMLResponse:
     )
 
 
+@app.get("/entity", response_class=HTMLResponse)
+def ui_entity(request: Request, id: str) -> HTMLResponse:
+    kg = KG.from_env()
+    props: Dict[str, Any] = {}
+    neighbors: list[dict[str, Any]] = []
+    try:
+        props = kg.get_entity_props(id)
+    except Exception:
+        props = {}
+    try:
+        neighbors = kg.neighbors(id, limit=30)
+    except Exception:
+        neighbors = []
+    return templates.TemplateResponse(
+        "entity.html",
+        {
+            "request": request,
+            "id": id,
+            "props": props,
+            "neighbors": neighbors,
+            "canonical": str(request.url),
+        },
+    )
+
+
 @app.post("/ingest")
 def ingest(q: str, sources: str = "wikidata,dbpedia") -> dict:
     count = 0

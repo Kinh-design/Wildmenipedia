@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href="{{ canonical }}" />
+    <title>{{ props.name or id }} • Wildmenipedia</title>
+    <style>
+      :root { --accent: #00e5ff; }
+      body[data-theme="dark"]{
+        --bg:#0b0f14; --panel:#0f141a; --muted:#9aa4af; --text:#e6edf3; --chip:#19212a; --border:#1b2733;
+      }
+      body[data-theme="light"]{
+        --bg:#fbfbfc; --panel:#ffffff; --muted:#5f6b76; --text:#0f1419; --chip:#eef2f6; --border:#e5e9ef;
+      }
+      html, body { height:100%; }
+      body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+      .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+      a { color: var(--accent); text-decoration: none; }
+      .crumbs { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+      .card { background: var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; }
+      .row { display:grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
+      .title { font-weight:700; font-size: 20px; }
+      .chip { display:inline-block; padding:3px 8px; border-radius:999px; background:var(--chip); color:var(--muted); font-size:12px; margin-right:6px; }
+      .fact { border-top: 1px solid var(--border); padding: 8px 0; }
+      .fact:first-child { border-top: 0; }
+      .uri { color: var(--muted); font-family: ui-monospace,Menlo,Consolas,monospace; font-size: 12px; }
+      .btn { background: var(--accent); color:#001015; border:0; padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer; }
+      .actions { display:flex; gap:8px; margin-top:10px; }
+      .theme { float:right; }
+    </style>
+    <script>
+      (function(){
+        const pref = localStorage.getItem('theme') || 'dark';
+        document.addEventListener('DOMContentLoaded', ()=>{
+          document.body.dataset.theme = pref;
+          const t = document.getElementById('theme');
+          if (t) t.checked = pref === 'dark';
+        });
+        window.toggleTheme = function(cb){
+          const theme = cb.checked ? 'dark' : 'light';
+          document.body.dataset.theme = theme;
+          localStorage.setItem('theme', theme);
+        }
+      })();
+      async function indexEmbeddings(id){
+        try{ await fetch('/index?id='+encodeURIComponent(id), {method:'POST'}); location.reload(); }catch(e){}
+      }
+      async function enrichByName(name){
+        if(!name) return; try{ await fetch('/ingest?q='+encodeURIComponent(name), {method:'POST'}); location.reload(); }catch(e){}
+      }
+    </script>
+  </head>
+  <body data-theme="dark">
+    <div class="container">
+      <div class="crumbs"><a href="/">Home</a> / <a href="/search?q={{ props.name or id }}">Search</a> / <span>{{ props.name or id }}</span>
+        <label class="theme"><input id="theme" type="checkbox" onchange="toggleTheme(this)" checked> Dark</label>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <div class="title">{{ props.name or id }}</div>
+        {% if props.aliases %}
+        <div style="margin-top:6px;">
+          {% for a in props.aliases %}<span class="chip">{{ a }}</span>{% endfor %}
+        </div>
+        {% endif %}
+        <div class="actions">
+          <button class="btn" onclick="indexEmbeddings('{{ id }}')">Index label + aliases</button>
+          <button class="btn" onclick="enrichByName('{{ props.name or id }}')">Enrich</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <div class="chip">Neighbors</div>
+          {% for n in neighbors %}
+          {% set m = n.meta or {} %}
+          <div class="fact">
+            <div><span class="uri">{{ n.s }}</span> → <span class="uri">{{ n.o }}</span></div>
+            <div>
+              <span class="chip">{{ n.p }}</span>
+              {% if m.pred_code %}<span class="chip">{{ m.pred_code }}</span>{% endif %}
+              {% if m.rank %}<span class="chip">rank {{ m.rank }}</span>{% endif %}
+            </div>
+            {% if m.object_label %}<div class="muted">object label: {{ m.object_label }}</div>{% endif %}
+            <div style="margin-top:4px;">
+              <a href="/entity?id={{ n.s|urlencode }}">open subject</a> ·
+              <a href="/entity?id={{ n.o|urlencode }}">open object</a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="card">
+          <div class="chip">Metadata</div>
+          <div style="margin-top:8px;">
+            <div><span class="muted">Entity ID:</span> <span class="uri">{{ id }}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
