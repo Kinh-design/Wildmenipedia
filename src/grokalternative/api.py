@@ -1,4 +1,5 @@
 import hashlib
+from typing import Any, Dict
 
 from fastapi import FastAPI
 
@@ -52,20 +53,15 @@ def graphrag(q: str) -> dict:
     return {"ok": True, **out}
 
 
-@app.post("/index")
-def index_entity(id: str, include_aliases: bool = True) -> dict:
-    """Backfill embeddings in Qdrant for a given entity id based on its label and aliases.
-
-    Best-effort: if vector store is unreachable or the entity is missing, returns indexed=0.
-    """
+def _index_single(id: str, include_label: bool, include_aliases: bool) -> Dict[str, Any]:
     kg = KG.from_env()
-    props = {}
+    props: Dict[str, Any] = {}
     try:
         props = kg.get_entity_props(id)
     except Exception:
         props = {}
     if not props:
-        return {"ok": True, "indexed": 0, "id": id, "message": "entity not found"}
+        return {"id": id, "indexed": 0, "message": "entity not found"}
 
     # Init vector backend
     embedder = None
@@ -79,11 +75,11 @@ def index_entity(id: str, include_aliases: bool = True) -> dict:
         vs = None
 
     if not (embedder and vs):
-        return {"ok": True, "indexed": 0, "id": id, "message": "vector backend unavailable"}
+        return {"id": id, "indexed": 0, "message": "vector backend unavailable"}
 
     indexed = 0
     label = props.get("name")
-    if isinstance(label, str) and label.strip():
+    if include_label and isinstance(label, str) and label.strip():
         try:
             vec = embedder.embed(label)
             src = "wikidata" if "wikidata.org" in id else ("dbpedia" if "dbpedia.org" in id else "unknown")
@@ -117,4 +113,37 @@ def index_entity(id: str, include_aliases: bool = True) -> dict:
                 except Exception:
                     continue
 
-    return {"ok": True, "indexed": indexed, "id": id}
+    return {"id": id, "indexed": indexed}
+
+
+@app.post("/index")
+def index_entity(id: str, include_label: bool = True, include_aliases: bool = True) -> dict:
+    """Backfill embeddings for a single entity id.
+
+    Set include_label=False for aliases-only indexing.
+    """
+    res = _index_single(id=id, include_label=include_label, include_aliases=include_aliases)
+    return {"ok": True, **res}
+
+
+@app.post("/index/batch")
+def index_batch(ids: str, include_label: bool = True, include_aliases: bool = True) -> dict:
+    """Batch backfill. ids is a comma-separated list of entity IDs.
+
+    Example: /index/batch?ids=http://www.wikidata.org/entity/Q42,http://dbpedia.org/resource/Neo4j
+    """
+    raw = [x.strip() for x in (ids or "").split(",") if x.strip()]
+    seen = []
+    for x in raw:
+        if x not in seen:
+            seen.append(x)
+    results = []
+    total = 0
+    for eid in seen:
+        r = _index_single(id=eid, include_label=include_label, include_aliases=include_aliases)
+        results.append(r)
+        try:
+            total += int(r.get("indexed", 0))
+        except Exception:
+            pass
+    return {"ok": True, "count": len(seen), "indexed_total": total, "results": results}
