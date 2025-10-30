@@ -126,6 +126,16 @@ def ingest_from_dbpedia(term: str, kg: KG | None = None, limit: int = 5) -> int:
 
 def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
     count = 0
+    # Prepare vector backend (best-effort)
+    embedder: Embedder | None = None
+    vs: VS | None = None
+    try:
+        embedder = Embedder(dim=256)
+        vs = VS.from_env()
+        vs.ensure_collection(name="entities", dim=embedder.dim)
+    except Exception:
+        embedder = None
+        vs = None
     for t in triples:
         s = t.get("subject", "").strip()
         p = t.get("predicate", "").strip()
@@ -160,5 +170,21 @@ def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
                 kg.add_type(s, o)
         except Exception:
             pass
+        # Index object labels for common taxonomy predicates
+        if embedder and vs:
+            try:
+                code = meta.get("pred_code", "")
+                obj_label = meta.get("object_label")
+                if obj_label and code in {"P31", "P279"}:
+                    vec = embedder.embed(obj_label)
+                    src = "wikidata" if ("wikidata.org" in o or "wikidata.org" in s) else ("dbpedia" if ("dbpedia.org" in o or "dbpedia.org" in s) else "unknown")
+                    vs.upsert_point(
+                        collection="entities",
+                        point_id=o,
+                        vector=vec,
+                        payload={"id": o, "label": obj_label, "source": src, "from_pred": code},
+                    )
+            except Exception:
+                pass
         count += 1
     return count
