@@ -64,7 +64,15 @@
           localStorage.setItem('theme', theme);
         }
       })();
-      async function enrich(q){ if(!q) return; try{ await fetch('/ingest?q='+encodeURIComponent(q), {method:'POST'}); location.href='/search?q='+encodeURIComponent(q);}catch(e){} }
+      async function enrich(q){
+        if(!q) return;
+        try{
+          const sel = document.querySelector('form.search select[name="page_size"]');
+          const ps = sel && sel.value ? sel.value : '15';
+          await fetch('/ingest?q='+encodeURIComponent(q), {method:'POST'});
+          location.href='/search?q='+encodeURIComponent(q)+'&page_size='+encodeURIComponent(ps);
+        }catch(e){}
+      }
     </script>
   </head>
   <body data-theme="dark">
