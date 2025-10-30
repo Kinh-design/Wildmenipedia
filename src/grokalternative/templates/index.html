@@ -126,6 +126,13 @@
           {% endif %}
         </div>
         {% endfor %}
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <div class="muted">{{ facts_total or 0 }} facts • page {{ facts_page or 1 }} of {{ facts_pages or 1 }}</div>
+          <div>
+            {% if facts_prev %}<a class="btn secondary" href="{{ facts_prev }}">Prev</a>{% endif %}
+            {% if facts_next %}<a class="btn secondary" href="{{ facts_next }}" style="margin-left:6px;">Next</a>{% endif %}
+          </div>
+        </div>
       </div>
       {% else %}
       <div class="muted" style="margin-top:12px;">Try “Who is Douglas Adams?” or “What is Neo4j?”</div>

@@ -72,7 +72,10 @@
 
       <div class="row">
         <div class="card">
-          <div class="chip">Neighbors</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="chip">Neighbors</div>
+            <div class="muted">{{ neighbors_total or 0 }} • page {{ neighbors_page or 1 }} of {{ neighbors_pages or 1 }}</div>
+          </div>
           {% for n in neighbors %}
           {% set m = n.meta or {} %}
           <div class="fact">
@@ -89,12 +92,42 @@
             </div>
           </div>
           {% endfor %}
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <div></div>
+            <div>
+              {% if neighbors_prev %}<a class="btn secondary" href="{{ neighbors_prev }}">Prev</a>{% endif %}
+              {% if neighbors_next %}<a class="btn secondary" href="{{ neighbors_next }}" style="margin-left:6px;">Next</a>{% endif %}
+            </div>
+          </div>
         </div>
         <div class="card">
           <div class="chip">Metadata</div>
           <div style="margin-top:8px;">
             <div><span class="muted">Entity ID:</span> <span class="uri">{{ id }}</span></div>
           </div>
+          {% if related %}
+          <div style="margin-top:12px;">
+            <div class="chip">Related entities</div>
+            <div style="margin-top:6px;">
+              {% for r in related %}
+              <div style="margin:4px 0;">
+                <a href="/entity?id={{ r.id|urlencode }}">{{ r.name }}</a>
+                <div class="uri">{{ r.id }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% if recommended %}
+          <div style="margin-top:12px;">
+            <div class="chip">Recommended queries</div>
+            <div style="margin-top:6px;">
+              {% for rq in recommended %}
+              <div style="margin:4px 0;"><a href="/search?q={{ rq|urlencode }}">{{ rq }}</a></div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>

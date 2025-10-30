@@ -36,21 +36,37 @@ class KG:
         with self.driver.session() as sess:
             sess.run(query, s=s, p=p, o=o, meta=meta or {})
 
-    def neighbors(self, node_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    def neighbors(self, node_id: str, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
         query = (
             "MATCH (s:Entity {id:$id})-[r:REL]->(o:Entity) "
-            "RETURN s.id AS s, r.pred AS p, o.id AS o, r AS meta LIMIT $limit"
+            "RETURN s.id AS s, r.pred AS p, o.id AS o, r AS meta "
+            "SKIP $offset LIMIT $limit"
         )
         with self.driver.session() as sess:
-            res = sess.run(query, id=node_id, limit=limit)
+            res = sess.run(query, id=node_id, limit=limit, offset=offset)
             return [dict(record) for record in res]
+
+    def count_neighbors(self, node_id: str) -> int:
+        query = (
+            "MATCH (s:Entity {id:$id})-[r:REL]->(o:Entity) "
+            "RETURN count(r) AS cnt"
+        )
+        try:
+            with self.driver.session() as sess:
+                rec = sess.run(query, id=node_id).single()
+                if not rec:
+                    return 0
+                data = dict(rec)
+                return int(data.get("cnt", 0))
+        except Exception:
+            return 0
 
     def get_entity_props(self, entity_id: str) -> Dict[str, Any]:
         """Return basic properties for an entity node: name and aliases.
 
         If the node does not exist, returns an empty dict.
         """
-        query = "MATCH (e:Entity {id:$id}) RETURN e.name AS name, e.aliases AS aliases LIMIT 1"
+        query = "MATCH (e:Entity {id:$id}) RETURN e.name AS name, e.aliases AS aliases, e.types AS types LIMIT 1"
         try:
             with self.driver.session() as sess:
                 rec = sess.run(query, id=entity_id).single()
@@ -58,7 +74,8 @@ class KG:
                     return {}
                 name = rec.get("name")
                 aliases = rec.get("aliases") or []
-                return {"name": name, "aliases": aliases}
+                types = rec.get("types") or []
+                return {"name": name, "aliases": aliases, "types": types}
         except Exception:
             return {}
 

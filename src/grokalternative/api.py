@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -53,7 +54,7 @@ def ui_home(request: Request) -> HTMLResponse:
 
 
 @app.get("/search", response_class=HTMLResponse)
-def ui_search(request: Request, q: str = "") -> HTMLResponse:
+def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15) -> HTMLResponse:
     q = (q or "").strip()
     if not q:
         return templates.TemplateResponse(
@@ -65,37 +66,112 @@ def ui_search(request: Request, q: str = "") -> HTMLResponse:
                 "facts": [],
                 "vector_hits": [],
                 "entities": [],
+                "facts_total": 0,
+                "facts_page": 1,
+                "facts_pages": 1,
+                "facts_page_size": page_size,
+                "facts_prev": None,
+                "facts_next": None,
             },
         )
     pipe = run_pipeline(q)
     hybrid = hybrid_answer(q)
+    facts = (hybrid or {}).get("facts", [])
+    total = len(facts)
+    p = max(1, int(page or 1))
+    ps = max(1, min(50, int(page_size or 15)))
+    start = (p - 1) * ps
+    end = start + ps
+    page_count = max(1, (total + ps - 1) // ps)
+    facts_slice = facts[start:end]
+
+    def qp(new_page: int) -> str:
+        return f"/search?{urlencode({'q': q, 'page': new_page, 'page_size': ps})}"
+
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "q": q,
             "summary": (hybrid or {}).get("answer"),
-            "facts": (hybrid or {}).get("facts", [])[:30],
+            "facts": facts_slice,
             "vector_hits": (hybrid or {}).get("vector_hits", [])[:10],
             "entities": (hybrid or {}).get("selected_entities", []),
             "pipeline": pipe,
+            "facts_total": total,
+            "facts_page": p,
+            "facts_pages": page_count,
+            "facts_page_size": ps,
+            "facts_prev": qp(p-1) if p > 1 else None,
+            "facts_next": qp(p+1) if p < page_count else None,
         },
     )
 
 
 @app.get("/entity", response_class=HTMLResponse)
-def ui_entity(request: Request, id: str) -> HTMLResponse:
+def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> HTMLResponse:
     kg = KG.from_env()
     props: Dict[str, Any] = {}
     neighbors: list[dict[str, Any]] = []
+    total = 0
     try:
         props = kg.get_entity_props(id)
     except Exception:
         props = {}
     try:
-        neighbors = kg.neighbors(id, limit=30)
+        total = kg.count_neighbors(id)
+        p = max(1, int(page or 1))
+        ps = max(1, min(50, int(page_size or 15)))
+        offset = (p - 1) * ps
+        neighbors = kg.neighbors(id, limit=ps, offset=offset)
     except Exception:
         neighbors = []
+        total = 0
+
+    # Related entities (top unique objects/subjects from neighbors)
+    related: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for n in neighbors:
+        for eid in [n.get("o"), n.get("s")]:
+            if not isinstance(eid, str) or eid == id:
+                continue
+            if eid in seen:
+                continue
+            seen.add(eid)
+            # best-effort name lookup
+            try:
+                eprops = kg.get_entity_props(eid)
+            except Exception:
+                eprops = {}
+            related.append({"id": eid, "name": eprops.get("name") or eid})
+            if len(related) >= 10:
+                break
+        if len(related) >= 10:
+            break
+
+    # Recommended queries
+    name = props.get("name") or id
+    rec_q: list[str] = [
+        f"Who is {name}?",
+        f"What is {name}?",
+        f"What type is {name}?",
+    ]
+    for n in neighbors[:3]:
+        m = (n.get("meta") or {})
+        tgt_label = m.get("object_label") or n.get("o")
+        try:
+            if isinstance(tgt_label, str):
+                rec_q.append(f"How is {name} related to {tgt_label}?")
+        except Exception:
+            pass
+
+    # Pagination helpers
+    p = max(1, int(page or 1))
+    ps = max(1, min(50, int(page_size or 15)))
+    page_count = max(1, (total + ps - 1) // ps) if total else 1
+    def qp(new_page: int) -> str:
+        return f"/entity?{urlencode({'id': id, 'page': new_page, 'page_size': ps})}"
+
     return templates.TemplateResponse(
         "entity.html",
         {
@@ -104,6 +180,14 @@ def ui_entity(request: Request, id: str) -> HTMLResponse:
             "props": props,
             "neighbors": neighbors,
             "canonical": str(request.url),
+            "neighbors_total": total,
+            "neighbors_page": p,
+            "neighbors_pages": page_count,
+            "neighbors_page_size": ps,
+            "neighbors_prev": qp(p-1) if p > 1 else None,
+            "neighbors_next": qp(p+1) if p < page_count else None,
+            "related": related,
+            "recommended": rec_q,
         },
     )
 
