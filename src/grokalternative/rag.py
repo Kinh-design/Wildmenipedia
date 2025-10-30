@@ -44,7 +44,7 @@ def hybrid_answer(question: str, kg: KG | None = None, vs: VS | None = None, top
     vector_hits: List[Dict[str, Any]] = []
     try:
         q_vec = embedder.embed(question)
-        vector_hits = vs.search("default", q_vec, top_k=top_k)
+        vector_hits = vs.search("entities", q_vec, top_k=top_k)
     except Exception:
         vector_hits = []
 

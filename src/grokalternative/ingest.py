@@ -3,11 +3,22 @@ from __future__ import annotations
 from typing import Dict, List
 
 from .connectors import sparql
-from .stores import KG
+from .embeddings import Embedder
+from .stores import KG, VS
 
 
 def ingest_labels(kg: KG, items: List[Dict[str, str]]) -> int:
     count = 0
+    # Prepare vector indexing (best-effort)
+    embedder: Embedder | None = None
+    vs: VS | None = None
+    try:
+        embedder = Embedder(dim=256)
+        vs = VS.from_env()
+        vs.ensure_collection(name="entities", dim=embedder.dim)
+    except Exception:
+        embedder = None
+        vs = None
     for it in items:
         sid = it.get("id", "").strip()
         label = it.get("label", "").strip()
@@ -17,6 +28,19 @@ def ingest_labels(kg: KG, items: List[Dict[str, str]]) -> int:
         kg.set_label(sid, label)
         # Keep an edge to preserve prior behavior/minimal provenance
         kg.upsert_triple(sid, "has_label", sid, {"label": label})
+        # Index into Qdrant (if available)
+        if embedder and vs:
+            try:
+                vec = embedder.embed(label)
+                src = "wikidata" if "wikidata.org" in sid else ("dbpedia" if "dbpedia.org" in sid else "unknown")
+                vs.upsert_point(
+                    collection="entities",
+                    point_id=sid,
+                    vector=vec,
+                    payload={"id": sid, "label": label, "source": src},
+                )
+            except Exception:
+                pass
         count += 1
     return count
 
