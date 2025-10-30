@@ -30,16 +30,6 @@ def hybrid_answer(question: str, kg: KG | None = None, vs: VS | None = None, top
     vs = vs or VS.from_env()
     embedder = Embedder(dim=256)
 
-    # Graph side
-    try:
-        neighbors = kg.neighbors(question, limit=10)
-    except Exception:
-        neighbors = []
-    facts = [
-        {"subject": n.get("s"), "predicate": n.get("p"), "object": n.get("o"), "meta": n.get("meta")}
-        for n in neighbors
-    ]
-
     # Vector side
     vector_hits: List[Dict[str, Any]] = []
     try:
@@ -48,8 +38,32 @@ def hybrid_answer(question: str, kg: KG | None = None, vs: VS | None = None, top
     except Exception:
         vector_hits = []
 
+    # Graph side: prefer neighbors of top vector-hit entity ids; fallback to raw question node id
+    facts: List[Dict[str, Any]] = []
+    candidate_ids: List[str] = []
+    for hit in vector_hits:
+        payload = hit.get("payload") or {}
+        cand = payload.get("id") or payload.get("entity_id")
+        if isinstance(cand, str):
+            candidate_ids.append(cand)
+    if not candidate_ids:
+        candidate_ids = [question]
+    for node_id in candidate_ids[:3]:
+        try:
+            neighbors = kg.neighbors(node_id, limit=10)
+        except Exception:
+            neighbors = []
+        for n in neighbors:
+            facts.append({
+                "subject": n.get("s"),
+                "predicate": n.get("p"),
+                "object": n.get("o"),
+                "meta": n.get("meta"),
+            })
+
     return {
         "answer": f"Hybrid summary for '{question}': graph_facts={len(facts)}, vector_hits={len(vector_hits)}.",
         "facts": facts,
         "vector_hits": vector_hits,
+        "selected_entities": candidate_ids,
     }
