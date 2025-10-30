@@ -152,10 +152,11 @@ def wikidata_statements_with_qualifiers_query(qid_or_uri: str, limit: int = 300)
     PREFIX ps: <http://www.wikidata.org/prop/statement/>
     PREFIX pq: <http://www.wikidata.org/prop/qualifier/>
     PREFIX wikibase: <http://wikiba.se/ontology#>
-    SELECT ?p ?pLabel ?ps ?psLabel ?qualPred ?qualPredLabel ?qual ?qualLabel WHERE {{
+    SELECT ?p ?pLabel ?ps ?psLabel ?qualPred ?qualPredLabel ?qual ?qualLabel ?rank WHERE {{
       wd:{qid} ?p ?statement .
       ?p wikibase:statementProperty ?pPS .
       ?statement ?pPS ?ps .
+      ?statement wikibase:rank ?rank .
       OPTIONAL {{
         ?statement ?qualPred ?qual .
         FILTER(STRSTARTS(STR(?qualPred), STR(pq:)))
@@ -208,7 +209,16 @@ def extract_wikidata_triples_with_qualifiers(subject_qid_or_uri: str, data: Dict
             "predicate_label": p_label,
             "object_label": ps_label,
             "qualifiers": [],
+            "rank": "",
         })
+        rank_uri = b.get("rank", {}).get("value", "")
+        if rank_uri:
+            if rank_uri.endswith("#PreferredRank"):
+                rec["rank"] = "preferred"
+            elif rank_uri.endswith("#DeprecatedRank"):
+                rec["rank"] = "deprecated"
+            else:
+                rec["rank"] = "normal"
         qpred = b.get("qualPred", {}).get("value", "")
         qpred_label = b.get("qualPredLabel", {}).get("value", "")
         qval = b.get("qual", {}).get("value", "")
@@ -255,4 +265,51 @@ def extract_dbpedia_triples(subject_uri: str, data: Dict[str, Any]) -> List[Dict
                 "object": o,
                 "object_label": o_label,
             })
+    return out
+
+
+# ------------------------
+# Utility/transform helpers
+# ------------------------
+
+def predicate_short_code(uri: str) -> str:
+    if "/prop/direct/" in uri:
+        return uri.split("/prop/direct/")[-1]
+    if "/prop/qualifier/" in uri:
+        return "pq:" + uri.split("/prop/qualifier/")[-1]
+    if uri.startswith("http://dbpedia.org/ontology/"):
+        return "dbo:" + uri.split("http://dbpedia.org/ontology/")[-1]
+    return uri
+
+
+def select_preferred_statements(triples: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    has_pref = any(t.get("rank") == "preferred" for t in triples)
+    if has_pref:
+        return [t for t in triples if t.get("rank") == "preferred"]
+    # otherwise drop deprecated
+    return [t for t in triples if t.get("rank") != "deprecated"]
+
+
+def wikidata_aliases_query(qid_or_uri: str, limit: int = 100) -> str:
+    qid = _qid_from_uri(qid_or_uri)
+    return f"""
+    PREFIX wd: <http://www.wikidata.org/entity/>
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    SELECT ?alias WHERE {{
+      wd:{qid} skos:altLabel ?alias .
+      FILTER(LANG(?alias) = 'en')
+    }} LIMIT {limit}
+    """.strip()
+
+
+def wikidata_aliases(qid_or_uri: str, limit: int = 100) -> Dict[str, Any]:
+    return query_sparql(WIKIDATA_SPARQL, wikidata_aliases_query(qid_or_uri, limit))
+
+
+def extract_aliases(data: Dict[str, Any]) -> List[str]:
+    out: List[str] = []
+    for b in data.get("results", {}).get("bindings", []):
+        a = b.get("alias", {}).get("value", "")
+        if a:
+            out.append(a)
     return out

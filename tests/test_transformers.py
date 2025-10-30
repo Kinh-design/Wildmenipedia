@@ -3,7 +3,9 @@ from grokalternative.connectors.sparql import (
     extract_labels_from_results,
     extract_wikidata_triples,
     extract_wikidata_triples_with_qualifiers,
+    predicate_short_code,
     select_best_candidate,
+    select_preferred_statements,
 )
 
 
@@ -108,3 +110,19 @@ def test_extract_wikidata_triples_with_qualifiers_minimal():
     assert t["predicate_label"] == "spouse"
     assert t["object_label"] == "Jane Belson"
     assert t["qualifiers"] and t["qualifiers"][0]["predicate"].endswith("/P580")
+
+
+def test_predicate_short_code_mappings():
+    assert predicate_short_code("http://www.wikidata.org/prop/direct/P31") == "P31"
+    assert predicate_short_code("http://www.wikidata.org/prop/qualifier/P580").startswith("pq:")
+    assert predicate_short_code("http://dbpedia.org/ontology/birthPlace").startswith("dbo:")
+
+
+def test_select_preferred_statements():
+    triples = [
+        {"rank": "normal"},
+        {"rank": "preferred"},
+        {"rank": "deprecated"},
+    ]
+    out = select_preferred_statements(triples)  # type: ignore[arg-type]
+    assert all(t.get("rank") == "preferred" for t in out)

@@ -40,7 +40,16 @@ def ingest_from_wikidata(term: str, kg: KG | None = None, limit: int = 5) -> int
         # with qualifiers
         stmts_raw = sparql.wikidata_statements_with_qualifiers(top["id"], limit=300)
         stmts = sparql.extract_wikidata_triples_with_qualifiers(top["id"], stmts_raw)
+        stmts = sparql.select_preferred_statements(stmts)
         total += ingest_triples(backend, stmts)
+        # aliases
+        try:
+            aliases_raw = sparql.wikidata_aliases(top["id"], limit=100)
+            aliases = sparql.extract_aliases(aliases_raw)
+            for a in aliases:
+                backend.add_alias(top["id"], a)
+        except Exception:
+            pass
     return total
 
 
@@ -75,6 +84,8 @@ def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
             meta["predicate_label"] = t["predicate_label"]
         if "object_label" in t and t["object_label"]:
             meta["object_label"] = t["object_label"]
+        if "rank" in t and t["rank"]:
+            meta["rank"] = t["rank"]
         if "qualifiers" in t and t["qualifiers"]:
             # store qualifiers as JSON string to keep schema simple
             try:
@@ -83,6 +94,18 @@ def ingest_triples(kg: KG, triples: List[Dict[str, str]]) -> int:
                 meta["qualifiers"] = json.dumps(t["qualifiers"]) 
             except Exception:
                 pass
+        # short predicate code
+        try:
+            meta["pred_code"] = sparql.predicate_short_code(p)
+        except Exception:
+            pass
         kg.upsert_triple(s, p, o, meta)
+        # Derived node properties
+        try:
+            code = meta.get("pred_code", "")
+            if code == "P31":
+                kg.add_type(s, o)
+        except Exception:
+            pass
         count += 1
     return count

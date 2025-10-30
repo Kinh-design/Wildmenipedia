@@ -68,6 +68,28 @@ class KG:
         with self.driver.session() as sess:
             sess.run(query, id=entity_id, label=label)
 
+    def add_alias(self, entity_id: str, alias: str) -> None:
+        query = (
+            "MERGE (e:Entity {id:$id}) "
+            "SET e.aliases = CASE "
+            "WHEN e.aliases IS NULL THEN [$alias] "
+            "WHEN NOT $alias IN e.aliases THEN e.aliases + $alias "
+            "ELSE e.aliases END"
+        )
+        with self.driver.session() as sess:
+            sess.run(query, id=entity_id, alias=alias)
+
+    def add_type(self, entity_id: str, type_uri: str) -> None:
+        query = (
+            "MERGE (e:Entity {id:$id}) "
+            "SET e.types = CASE "
+            "WHEN e.types IS NULL THEN [$type] "
+            "WHEN NOT $type IN e.types THEN e.types + $type "
+            "ELSE e.types END"
+        )
+        with self.driver.session() as sess:
+            sess.run(query, id=entity_id, type=type_uri)
+
 
 @dataclass
 class VS:
