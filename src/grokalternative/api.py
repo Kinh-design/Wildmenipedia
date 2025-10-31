@@ -5,7 +5,7 @@ from typing import Any, Dict
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from .agents.orchestrator import run_pipeline
@@ -507,3 +507,76 @@ def index_batch(ids: str, include_label: bool = True, include_aliases: bool = Tr
         except Exception:
             pass
     return {"ok": True, "count": len(seen), "indexed_total": total, "results": results}
+
+
+@app.get("/export/markdown")
+def export_markdown(
+    q: str,
+    urls: str = "",
+    strategy: str = "auto",
+    summarize: bool = True,
+    max_sentences: int = 5,
+    tone: str = "neutral",
+    length: int = 300,
+    audience: str = "general",
+    timeframe: int = 90,
+):
+    """Return a Markdown export of the answer, facts, and sources with inline footnotes."""
+    q = (q or "").strip()
+    pipe = run_pipeline(q, tone=tone, length=length, audience=audience, timeframe=timeframe)
+    web_docs = []
+    raw_urls = [u.strip() for u in (urls or "").split(",") if u.strip()]
+    if raw_urls:
+        try:
+            web_docs = realtime_fetch(raw_urls, strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
+        except Exception:
+            web_docs = []
+    hybrid = hybrid_answer(
+        q,
+        web_docs=web_docs,
+        tone=tone,
+        length=length,
+        audience=audience,
+        timeframe=timeframe,
+    )
+
+    ans = (hybrid or {}).get("answer") or ""
+    facts = (hybrid or {}).get("facts", [])
+    sources = (hybrid or {}).get("sources", [])
+
+    lines: list[str] = []
+    lines.append(f"# {q}")
+    lines.append("")
+    if ans:
+        lines.append(ans)
+        lines.append("")
+    lines.append("## Supporting facts")
+    for f in facts:
+        s = f.get("subject")
+        p = f.get("predicate")
+        o = f.get("object")
+        cite = ""
+        try:
+            if f.get("citations"):
+                n = f["citations"][0]
+                cite = f" [{n}]"
+        except Exception:
+            pass
+        lines.append(f"- {s} — {p} → {o}{cite}")
+    lines.append("")
+    if pipe:
+        lines.append("## Pipeline")
+        for k, v in pipe.items():
+            try:
+                lines.append(f"- {k}: {v}")
+            except Exception:
+                continue
+        lines.append("")
+    lines.append("## Sources")
+    for i, s in enumerate(sources, start=1):
+        title = s.get("title") or s.get("url")
+        engine = s.get("engine")
+        extra = f" ({engine})" if engine else ""
+        lines.append(f"[{i}] {title}{extra} — {s.get('url')}")
+    md = "\n".join(lines)
+    return Response(content=md, media_type="text/markdown")

@@ -136,6 +136,9 @@
         <div class="card">
           <div class="muted">Answer</div>
           <div class="answer" style="margin-top:8px;">{% if summary_html %}{{ summary_html|safe }}{% else %}{{ summary }}{% endif %}</div>
+          <div style="margin-top:8px;">
+            <a class="btn secondary" href="/export/markdown?q={{ q|urlencode }}&urls={{ (urls or '')|urlencode }}&strategy={{ strategy or 'auto' }}&summarize={{ summarize }}&max_sentences={{ max_sentences or 5 }}&tone={{ tone or 'neutral' }}&length={{ length or 300 }}&audience={{ audience or 'general' }}&timeframe={{ timeframe or 90 }}" target="_blank" rel="noopener">Export MD</a>
+          </div>
           {% if confidence %}<div style="margin-top:8px;"><span class="chip">confidence: {{ confidence }}</span></div>{% endif %}
           {% if sources %}
           <div style="margin-top:10px;">
