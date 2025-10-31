@@ -11,6 +11,7 @@ from .agents.orchestrator import run_pipeline
 from .embeddings import Embedder
 from .ingest import ingest_from_dbpedia, ingest_from_wikidata
 from .rag import graphrag_answer, hybrid_answer
+from .scrape import realtime_fetch
 from .settings import get_settings
 from .stores import KG, VS
 
@@ -249,6 +250,20 @@ def ingest(q: str, sources: str = "wikidata,dbpedia") -> dict:
 def graphrag(q: str) -> dict:
     out = graphrag_answer(q)
     return {"ok": True, **out}
+
+
+@app.post("/scrape")
+def scrape(urls: str, strategy: str = "auto", summarize: bool = True, max_sentences: int = 5) -> dict:
+    """Real-time web scraping for one or more URLs.
+
+    Example:
+      POST /scrape?urls=https://example.com,https://news.ycombinator.com&strategy=auto
+    """
+    raw = [u.strip() for u in (urls or "").split(",") if u.strip()]
+    if not raw:
+        return {"ok": False, "error": "no urls provided"}
+    results = realtime_fetch(raw, strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
+    return {"ok": True, "count": len(results), "results": results}
 
 
 def _index_single(id: str, include_label: bool, include_aliases: bool) -> Dict[str, Any]:
