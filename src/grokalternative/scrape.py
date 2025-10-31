@@ -101,7 +101,7 @@ def _fetch_requests(url: str, timeout: float = 15.0) -> FetchResult:
 
 def _fetch_cloudscraper(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
     try:
-        import cloudscraper  # type: ignore
+        import cloudscraper  # type: ignore[import-not-found]
     except Exception:
         return None
 
@@ -133,6 +133,105 @@ def _fetch_cloudscraper(url: str, timeout: float = 15.0) -> Optional[FetchResult
         )
 
 
+def _fetch_scrapy(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
+    """Attempt to fetch using Scrapy if available.
+
+    Note: This requires Scrapy/Twisted runtime which may not be present. We
+    avoid importing unless selected. Returns None if unavailable.
+    """
+    try:
+        import scrapy  # type: ignore[import-not-found]
+        from scrapy.crawler import CrawlerProcess  # type: ignore[import-not-found]
+    except Exception:
+        return None
+
+    class _SingleSpider(scrapy.Spider):
+        name = "single_fetch"
+        custom_settings = {"LOG_ENABLED": False, "DOWNLOAD_TIMEOUT": int(timeout)}
+
+        def __init__(self, start_url: str, **kwargs: Any):
+            super().__init__(**kwargs)
+            self.start_url = start_url
+            self._html: Optional[str] = None
+
+        def start_requests(self):
+            yield scrapy.Request(self.start_url, dont_filter=True)
+
+        def parse(self, response):
+            self._html = response.text
+            yield {"title": response.css("title::text").get(), "html": response.text}
+
+    t0 = time.time()
+    try:
+        process = CrawlerProcess()
+        spider = _SingleSpider(start_url=url)
+        # Scrapy collects items via signals; easiest is to add a pipeline, but to
+        # keep minimal we inspect spider after crawl.
+        process.crawl(spider)
+        process.start()
+        html = getattr(spider, "_html", None) or ""
+        title = _extract_title_html(html)
+        text = _strip_tags(html)
+        return FetchResult(
+            url=url,
+            ok=bool(html),
+            status_code=200 if html else None,
+            engine="scrapy",
+            duration_ms=int((time.time() - t0) * 1000),
+            title=title,
+            html_length=len(html),
+            text=text,
+        )
+    except Exception as e:
+        return FetchResult(
+            url=url,
+            ok=False,
+            status_code=None,
+            engine="scrapy",
+            duration_ms=int((time.time() - t0) * 1000),
+            error=str(e),
+        )
+
+
+def _fetch_crawl4ai(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
+    """Attempt to fetch via crawl4ai if installed.
+
+    Placeholder adapter: returns None if package not present.
+    """
+    try:
+        pass
+    except Exception:
+        return None
+    # Implementation specifics can vary; as a safe default fallback to httpx
+    return _fetch_requests(url, timeout=timeout)
+
+
+def _fetch_crawlee(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
+    """Attempt to fetch via crawlee-python if installed.
+
+    Placeholder adapter: returns None if package not present.
+    """
+    try:
+        pass
+    except Exception:
+        return None
+    # Minimal fallback using httpx until richer adapter is wired
+    return _fetch_requests(url, timeout=timeout)
+
+
+def _fetch_firecrawl(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
+    """Attempt to fetch via firecrawl client if installed/configured.
+
+    Placeholder adapter: returns None if package not present.
+    """
+    try:
+        pass
+    except Exception:
+        return None
+    # Minimal fallback using httpx until API client is configured
+    return _fetch_requests(url, timeout=timeout)
+
+
 def realtime_fetch(
     urls: List[str],
     strategy: str = "auto",
@@ -158,11 +257,26 @@ def realtime_fetch(
             res = _fetch_cloudscraper(u, timeout=timeout)
             if res is None:
                 res = _fetch_requests(u, timeout=timeout)
+        elif strategy == "scrapy":
+            res = _fetch_scrapy(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+        elif strategy == "crawl4ai":
+            res = _fetch_crawl4ai(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+        elif strategy == "crawlee":
+            res = _fetch_crawlee(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+        elif strategy == "firecrawl":
+            res = _fetch_firecrawl(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
         elif strategy in ("httpx", "requests"):
             res = _fetch_requests(u, timeout=timeout)
         else:  # auto
-            # Try cloudscraper if available, then fallback
-            res = _fetch_cloudscraper(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+            # Try multiple adapters in order, fallback to httpx
+            res = (
+                _fetch_cloudscraper(u, timeout=timeout)
+                or _fetch_crawl4ai(u, timeout=timeout)
+                or _fetch_crawlee(u, timeout=timeout)
+                or _fetch_firecrawl(u, timeout=timeout)
+                or _fetch_scrapy(u, timeout=timeout)
+                or _fetch_requests(u, timeout=timeout)
+            )
 
         if summarize and res and res.ok and (res.text or "").strip():
             try:

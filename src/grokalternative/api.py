@@ -55,7 +55,16 @@ def ui_home(request: Request) -> HTMLResponse:
 
 
 @app.get("/search", response_class=HTMLResponse)
-def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15) -> HTMLResponse:
+def ui_search(
+    request: Request,
+    q: str = "",
+    page: int = 1,
+    page_size: int = 15,
+    urls: str = "",
+    strategy: str = "auto",
+    summarize: bool = True,
+    max_sentences: int = 5,
+) -> HTMLResponse:
     q = (q or "").strip()
     if not q:
         return templates.TemplateResponse(
@@ -76,7 +85,15 @@ def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15)
             },
         )
     pipe = run_pipeline(q)
-    hybrid = hybrid_answer(q)
+    # Optional real-time fetch
+    web_docs = []
+    raw_urls = [u.strip() for u in (urls or "").split(",") if u.strip()]
+    if raw_urls:
+        try:
+            web_docs = realtime_fetch(raw_urls, strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
+        except Exception:
+            web_docs = []
+    hybrid = hybrid_answer(q, web_docs=web_docs)
     facts = (hybrid or {}).get("facts", [])
     total = len(facts)
     p = max(1, int(page or 1))
@@ -114,6 +131,8 @@ def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15)
             "summary": (hybrid or {}).get("answer"),
             "facts": facts_slice,
             "vector_hits": (hybrid or {}).get("vector_hits", [])[:10],
+            "sources": (hybrid or {}).get("sources", []),
+            "confidence": (hybrid or {}).get("confidence"),
             "entities": (hybrid or {}).get("selected_entities", []),
             "pipeline": pipe,
             "facts_total": total,
@@ -123,6 +142,10 @@ def ui_search(request: Request, q: str = "", page: int = 1, page_size: int = 15)
             "facts_prev": qp(p-1) if p > 1 else None,
             "facts_next": qp(p+1) if p < page_count else None,
             "facts_links": pages_links,
+            "urls": urls,
+            "strategy": strategy,
+            "summarize": summarize,
+            "max_sentences": max_sentences,
         },
     )
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .embeddings import Embedder
 from .stores import KG, VS
@@ -25,7 +25,13 @@ def graphrag_answer(question: str, kg: KG | None = None) -> Dict[str, Any]:
     }
 
 
-def hybrid_answer(question: str, kg: KG | None = None, vs: VS | None = None, top_k: int = 5) -> Dict[str, Any]:
+def hybrid_answer(
+    question: str,
+    kg: KG | None = None,
+    vs: VS | None = None,
+    top_k: int = 5,
+    web_docs: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     kg = kg or KG.from_env()
     vs = vs or VS.from_env()
     embedder = Embedder(dim=256)
@@ -86,9 +92,29 @@ def hybrid_answer(question: str, kg: KG | None = None, vs: VS | None = None, top
     # Sort facts by score desc
     facts_sorted = sorted(facts, key=lambda x: x.get("score", 0.0), reverse=True)
 
+    # Simple citation aggregation from web docs
+    sources: List[Dict[str, Any]] = []
+    if web_docs:
+        for d in web_docs[:10]:
+            try:
+                sources.append({
+                    "url": d.get("url"),
+                    "title": d.get("title") or d.get("url"),
+                    "engine": d.get("engine"),
+                })
+            except Exception:
+                continue
+    confidence = "low"
+    if len(sources) >= 3:
+        confidence = "high"
+    elif len(sources) == 2:
+        confidence = "medium"
+
     return {
         "answer": f"Hybrid summary for '{question}': graph_facts={len(facts_sorted)}, vector_hits={len(vector_hits)}.",
         "facts": facts_sorted,
         "vector_hits": vector_hits,
         "selected_entities": candidate_ids,
+        "sources": sources,
+        "confidence": confidence,
     }

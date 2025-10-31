@@ -88,6 +88,7 @@
 
       <form class="search" action="/search" method="get">
         <input type="text" name="q" placeholder="Ask about an entity, concept, or relationship…" value="{{ q }}" />
+        <input type="text" name="urls" placeholder="Comma-separated URLs (optional)" value="{{ urls or '' }}" style="flex:1; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px;" />
         <label class="muted" style="align-self:center;">Page size</label>
         <select name="page_size" style="background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;" onchange="this.form.submit()">
           {% for sz in [10,15,25,50] %}
@@ -103,6 +104,17 @@
         <div class="card">
           <div class="muted">Answer</div>
           <div class="answer" style="margin-top:8px;">{{ summary }}</div>
+          {% if confidence %}<div style="margin-top:8px;"><span class="chip">confidence: {{ confidence }}</span></div>{% endif %}
+          {% if sources %}
+          <div style="margin-top:10px;">
+            <div class="chip">Sources</div>
+            <ul class="hits">
+              {% for s in sources %}
+              <li><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a>{% if s.engine %} <span class="muted">({{ s.engine }})</span>{% endif %}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
           {% if entities %}
           <div style="margin-top:10px;">
             {% for e in entities %}
