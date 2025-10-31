@@ -172,6 +172,7 @@
           {% set m = f.meta or {} %}
           <div>
             <span class="chip">score {{ '%.2f' % (f.score or 0.0) }}</span>
+            {% if f.top_score is defined %}<span class="chip">rel {{ '%.2f' % (f.top_score or 0.0) }}</span>{% endif %}
             {% if m.rank %}<span class="chip">rank {{ m.rank }}</span>{% endif %}
             {% if m.pred_code %}<span class="chip">{{ m.pred_code }}</span>{% endif %}
           </div>
@@ -187,6 +188,16 @@
           </div>
           {% if m.object_label %}
           <div class="muted">object label: {{ m.object_label }}</div>
+          {% endif %}
+          {% if f.citations_all %}
+          <details style="margin-top:6px;">
+            <summary class="btn secondary" style="padding:2px 6px; font-size:12px;">Show all sources</summary>
+            <div class="muted" style="margin-top:6px;">
+              {% for c in f.citations_all %}
+                <a href="#src-{{ c.n }}">[{{ c.n }}]</a> <span class="chip">rel {{ '%.2f' % (c.score or 0.0) }}</span>
+              {% endfor %}
+            </div>
+          </details>
           {% endif %}
         </div>
         {% endfor %}

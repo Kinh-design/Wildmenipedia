@@ -152,15 +152,19 @@ def hybrid_answer(
                 qv = embedder.embed(claim)
             except Exception:
                 qv = [0.0] * embedder.dim
-            best_idx = None
-            best_sc = -1.0
+            ranked: List[tuple[int, float]] = []
             for idx, dv in enumerate(doc_vecs):
                 sc = _cos(qv, dv)
-                if sc > best_sc:
-                    best_sc = sc
-                    best_idx = idx
-            if best_idx is not None:
+                ranked.append((idx, sc))
+            ranked.sort(key=lambda x: x[1], reverse=True)
+            if ranked:
+                best_idx, best_sc = ranked[0]
                 rec["citations"] = [best_idx + 1]
+                rec["top_score"] = round(float(best_sc), 3)
+                # keep top 5 to show in UI toggle
+                rec["citations_all"] = [
+                    {"n": i + 1, "score": round(float(sc), 3)} for i, sc in ranked[:5]
+                ]
             elif sources:
                 rec["citations"] = [1]
 
