@@ -99,9 +99,11 @@ def hybrid_answer(
 
     # Simple citation aggregation from web docs
     sources: List[Dict[str, Any]] = []
+    docs: List[Dict[str, Any]] = []
     if web_docs:
         for d in web_docs[:10]:
             try:
+                docs.append(d)
                 sources.append({
                     "url": d.get("url"),
                     "title": d.get("title") or d.get("url"),
@@ -114,6 +116,51 @@ def hybrid_answer(
         confidence = "high"
     elif len(sources) == 2:
         confidence = "medium"
+
+    # Per-claim heuristic citation mapping: match by object label / ids in doc title/summary/text
+    if sources and facts_sorted:
+        def _kw(s: str) -> str:
+            try:
+                # use tail segment of URI-like ids
+                if "/" in s:
+                    s = s.rsplit("/", 1)[-1]
+                if "#" in s:
+                    s = s.rsplit("#", 1)[-1]
+                return s
+            except Exception:
+                return s
+
+        for rec in facts_sorted:
+            kws: List[str] = []
+            s = rec.get("subject")
+            o = rec.get("object")
+            m = (rec.get("meta") or {})
+            if isinstance(s, str):
+                kws.append(_kw(s))
+            if isinstance(o, str):
+                kws.append(_kw(o))
+            ol = m.get("object_label")
+            if isinstance(ol, str):
+                kws.append(ol)
+            scores: List[tuple[float, int]] = []
+            if docs:
+                for idx, d in enumerate(docs):
+                    text = " ".join(
+                        str(d.get(k) or "") for k in ("title", "summary", "text")
+                    ).lower()
+                    sc = 0.0
+                    for kw in kws:
+                        kwl = str(kw).lower()
+                        if kwl and kwl in text:
+                            sc += 1.0
+                    if sc > 0:
+                        scores.append((sc, idx))
+            # pick top 3 indices +1 for footnotes mapping
+            scores.sort(key=lambda x: x[0], reverse=True)
+            cits = [i + 1 for _, i in scores[:3]]
+            if not cits and sources:
+                cits = [1]
+            rec["citations"] = cits
 
     # Build style-aware summary with inline footnote markers tied to sources order
     if tone == "executive":

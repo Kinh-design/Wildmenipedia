@@ -175,7 +175,16 @@
             {% if m.rank %}<span class="chip">rank {{ m.rank }}</span>{% endif %}
             {% if m.pred_code %}<span class="chip">{{ m.pred_code }}</span>{% endif %}
           </div>
-          <div><span class="uri">{{ f.subject }}</span> <span class="pred">— {{ f.predicate }}</span> <span class="uri">→ {{ f.object }}</span></div>
+          <div>
+            <span class="uri">{{ f.subject }}</span> <span class="pred">— {{ f.predicate }}</span> <span class="uri">→ {{ f.object }}</span>
+            {% if f.citations %}
+              <span>
+                {% for n in f.citations %}
+                  <a href="#src-{{ n }}">[{{ n }}]</a>
+                {% endfor %}
+              </span>
+            {% endif %}
+          </div>
           {% if m.object_label %}
           <div class="muted">object label: {{ m.object_label }}</div>
           {% endif %}
