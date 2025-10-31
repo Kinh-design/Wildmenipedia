@@ -5,7 +5,7 @@ from typing import Any, Dict
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from .agents.orchestrator import run_pipeline
@@ -65,6 +65,7 @@ def ui_search(
     strategy: str = "auto",
     summarize: bool = True,
     max_sentences: int = 5,
+    live: bool = False,
     tone: str = "neutral",
     length: int = 300,
     audience: str = "general",
@@ -124,6 +125,7 @@ def ui_search(
             'strategy': strategy,
             'summarize': summarize,
             'max_sentences': max_sentences,
+            'live': live,
             'tone': tone,
             'length': length,
             'audience': audience,
@@ -163,6 +165,18 @@ def ui_search(
             return m.group(0)
         summary_html = re.sub(r"\[(\d+)\]", _repl, summary_text)
 
+    # Optional live streaming of web scrape results (SSE)
+    live_stream_url = None
+    if live and raw_urls and timeframe is not None:
+        qs = urlencode({
+            'urls': ','.join(raw_urls),
+            'strategy': strategy,
+            'summarize': summarize,
+            'max_sentences': max_sentences,
+            'timeframe': timeframe,
+        })
+        live_stream_url = f"/scrape/stream?{qs}"
+
     return templates.TemplateResponse(
         "index.html",
         {
@@ -187,6 +201,8 @@ def ui_search(
             "strategy": strategy,
             "summarize": summarize,
             "max_sentences": max_sentences,
+            "live": live,
+            "live_stream_url": live_stream_url,
             "tone": tone,
             "length": length,
             "audience": audience,
@@ -366,6 +382,35 @@ def scrape(urls: str, strategy: str = "auto", summarize: bool = True, max_senten
         return {"ok": False, "error": "no urls provided"}
     results = realtime_fetch(raw, strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
     return {"ok": True, "count": len(results), "results": results}
+
+
+@app.get("/scrape/stream")
+def scrape_stream(urls: str, strategy: str = "auto", summarize: bool = True, max_sentences: int = 5, timeframe: int = 90):
+    """SSE stream of scrape results for provided URLs. One pass, sequential per URL.
+
+    Clients can open EventSource(`/scrape/stream?...`) to receive incremental updates.
+    """
+    raw = [u.strip() for u in (urls or "").split(",") if u.strip()]
+    if not raw:
+        def _err():
+            yield "data: {\"error\": \"no urls provided\"}\n\n"
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    def _gen():
+        for u in raw:
+            try:
+                res = realtime_fetch([u], strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
+                import json
+                payload = {"url": u, "result": (res[0] if res else None), "timeframe": timeframe}
+                yield f"data: {json.dumps(payload)}\n\n"
+            except Exception as e:
+                import json
+                payload = {"url": u, "error": str(e)}
+                yield f"data: {json.dumps(payload)}\n\n"
+        # Optional end marker
+        yield "event: end\ndata: done\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
 
 
 def _index_single(id: str, include_label: bool, include_aliases: bool) -> Dict[str, Any]:
