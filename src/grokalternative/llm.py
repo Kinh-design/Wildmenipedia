@@ -208,6 +208,35 @@ def generate_answer(
         except Exception:
             pass
 
+    # Provider: Google Gemini (Generative Language API)
+    if provider in ("gemini", "google") and (s.__dict__.get("GOOGLE_API_KEY") or ""):
+        api_key = str(getattr(s, "GOOGLE_API_KEY"))
+        try:
+            # Default to a Gemini model if not specified appropriately
+            gmodel = model if model.startswith("gemini-") else "gemini-1.5-flash"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gmodel}:generateContent?key={api_key}"
+            # Compose request with system + user content
+            body = {
+                "system_instruction": {"parts": [{"text": sys}]},
+                "contents": [
+                    {"role": "user", "parts": [{"text": user}]}
+                ],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512},
+            }
+            with httpx.Client() as client:
+                resp = _request_with_retries(client, "POST", url, json=body)
+            data = resp.json()
+            cands = data.get("candidates") or []
+            if cands:
+                content = (cands[0] or {}).get("content") or {}
+                parts = content.get("parts") or []
+                if parts and isinstance(parts[0], dict):
+                    text = parts[0].get("text")
+                    if isinstance(text, str) and text.strip():
+                        return _clip_words(text.strip(), max(50, int(length)))
+        except Exception:
+            pass
+
     # Fallback local render
     lead = "Executive summary" if tone == "executive" else ("Quick take (with a wink)" if tone == "humorous" else "Summary")
     aud = "for a general audience" if audience == "general" else ("for non-technical readers" if audience == "non-technical" else "for experts")

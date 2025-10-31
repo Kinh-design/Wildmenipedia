@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
+    GOOGLE_API_KEY: str | None = None
 
     ENV: str = "dev"
 
