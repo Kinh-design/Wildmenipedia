@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Optional
 
 from .embeddings import Embedder
@@ -117,50 +118,51 @@ def hybrid_answer(
     elif len(sources) == 2:
         confidence = "medium"
 
-    # Per-claim heuristic citation mapping: match by object label / ids in doc title/summary/text
-    if sources and facts_sorted:
-        def _kw(s: str) -> str:
+    # Per-claim citation mapping with embedding-based relevance; cap to top-1
+    if sources and facts_sorted and docs:
+        # Precompute doc embeddings once
+        doc_texts: List[str] = [
+            " ".join(str(d.get(k) or "") for k in ("title", "summary", "text")) for d in docs
+        ]
+        doc_vecs: List[List[float]] = []
+        for t in doc_texts:
             try:
-                # use tail segment of URI-like ids
-                if "/" in s:
-                    s = s.rsplit("/", 1)[-1]
-                if "#" in s:
-                    s = s.rsplit("#", 1)[-1]
-                return s
+                doc_vecs.append(embedder.embed(t))
             except Exception:
-                return s
+                doc_vecs.append([0.0] * embedder.dim)
+
+        def _cos(a: List[float], b: List[float]) -> float:
+            try:
+                da = math.sqrt(sum(x * x for x in a)) or 1.0
+                db = math.sqrt(sum(x * x for x in b)) or 1.0
+                return sum(x * y for x, y in zip(a, b)) / (da * db)
+            except Exception:
+                return 0.0
 
         for rec in facts_sorted:
-            kws: List[str] = []
             s = rec.get("subject")
+            p = rec.get("predicate")
             o = rec.get("object")
             m = (rec.get("meta") or {})
-            if isinstance(s, str):
-                kws.append(_kw(s))
-            if isinstance(o, str):
-                kws.append(_kw(o))
             ol = m.get("object_label")
-            if isinstance(ol, str):
-                kws.append(ol)
-            scores: List[tuple[float, int]] = []
-            if docs:
-                for idx, d in enumerate(docs):
-                    text = " ".join(
-                        str(d.get(k) or "") for k in ("title", "summary", "text")
-                    ).lower()
-                    sc = 0.0
-                    for kw in kws:
-                        kwl = str(kw).lower()
-                        if kwl and kwl in text:
-                            sc += 1.0
-                    if sc > 0:
-                        scores.append((sc, idx))
-            # pick top 3 indices +1 for footnotes mapping
-            scores.sort(key=lambda x: x[0], reverse=True)
-            cits = [i + 1 for _, i in scores[:3]]
-            if not cits and sources:
-                cits = [1]
-            rec["citations"] = cits
+            claim = " | ".join(
+                [str(x) for x in [s, p, o, ol] if isinstance(x, str) and x]
+            )
+            try:
+                qv = embedder.embed(claim)
+            except Exception:
+                qv = [0.0] * embedder.dim
+            best_idx = None
+            best_sc = -1.0
+            for idx, dv in enumerate(doc_vecs):
+                sc = _cos(qv, dv)
+                if sc > best_sc:
+                    best_sc = sc
+                    best_idx = idx
+            if best_idx is not None:
+                rec["citations"] = [best_idx + 1]
+            elif sources:
+                rec["citations"] = [1]
 
     # Build style-aware summary with inline footnote markers tied to sources order
     if tone == "executive":
