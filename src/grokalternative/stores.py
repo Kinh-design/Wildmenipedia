@@ -28,6 +28,15 @@ class KG:
             self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
         return self._driver
 
+    def close(self) -> None:
+        try:
+            if self._driver is not None:
+                self._driver.close()
+        except Exception:
+            pass
+        finally:
+            self._driver = None
+
     def upsert_triple(self, s: str, p: str, o: str, meta: Dict[str, Any] | None = None) -> None:
         query = (
             "MERGE (s:Entity {id:$s}) MERGE (o:Entity {id:$o}) "
@@ -35,6 +44,7 @@ class KG:
         )
         with self.driver.session() as sess:
             sess.run(query, s=s, p=p, o=o, meta=meta or {})
+        self.close()
 
     def neighbors(self, node_id: str, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
         query = (
@@ -44,7 +54,9 @@ class KG:
         )
         with self.driver.session() as sess:
             res = sess.run(query, id=node_id, limit=limit, offset=offset)
-            return [dict(record) for record in res]
+            rows = [dict(record) for record in res]
+        self.close()
+        return rows
 
     def count_neighbors(self, node_id: str) -> int:
         query = (
@@ -60,6 +72,8 @@ class KG:
                 return int(data.get("cnt", 0))
         except Exception:
             return 0
+        finally:
+            self.close()
 
     def get_entity_props(self, entity_id: str) -> Dict[str, Any]:
         """Return basic properties for an entity node: name and aliases.
@@ -78,6 +92,8 @@ class KG:
                 return {"name": name, "aliases": aliases, "types": types}
         except Exception:
             return {}
+        finally:
+            self.close()
 
     def get_entity_names(self, entity_ids: list[str]) -> Dict[str, Optional[str]]:
         """Batch-resolve names for a list of entity IDs.
@@ -100,6 +116,8 @@ class KG:
                     out[str(d.get("id"))] = d.get("name")
         except Exception:
             pass
+        finally:
+            self.close()
         return out
 
     def ensure_schema(self) -> None:
@@ -120,11 +138,14 @@ class KG:
         except Exception:
             # best-effort; ignore if not permitted
             pass
+        finally:
+            self.close()
 
     def set_label(self, entity_id: str, label: str) -> None:
         query = "MERGE (e:Entity {id:$id}) SET e.name = $label"
         with self.driver.session() as sess:
             sess.run(query, id=entity_id, label=label)
+        self.close()
 
     def add_alias(self, entity_id: str, alias: str) -> None:
         query = (
@@ -136,6 +157,7 @@ class KG:
         )
         with self.driver.session() as sess:
             sess.run(query, id=entity_id, alias=alias)
+        self.close()
 
     def add_type(self, entity_id: str, type_uri: str) -> None:
         query = (
@@ -147,6 +169,7 @@ class KG:
         )
         with self.driver.session() as sess:
             sess.run(query, id=entity_id, type=type_uri)
+        self.close()
 
 
 @dataclass

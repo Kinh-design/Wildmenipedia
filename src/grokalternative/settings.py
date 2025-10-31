@@ -1,9 +1,10 @@
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
     NEO4J_URL: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "neo4j"
@@ -24,8 +25,7 @@ class Settings(BaseSettings):
     SCRAPER_ENABLE_CRAWLEE: bool = False
     SCRAPER_ENABLE_FIRECRAWL: bool = False
 
-    class Config:
-        env_file = ".env"
+    # Pydantic v2 config provided via model_config above
 
 
 @lru_cache(maxsize=1)

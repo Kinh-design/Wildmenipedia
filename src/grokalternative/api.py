@@ -43,9 +43,9 @@ def ask(q: str) -> dict:
 @app.get("/", response_class=HTMLResponse)
 def ui_home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "q": "",
             "summary": None,
             "facts": [],
@@ -74,9 +74,9 @@ def ui_search(
     q = (q or "").strip()
     if not q:
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "q": "",
                 "summary": None,
                 "facts": [],
@@ -178,9 +178,9 @@ def ui_search(
         live_stream_url = f"/scrape/stream?{qs}"
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "q": q,
             "summary": summary_text,
             "summary_html": summary_html,
@@ -320,9 +320,9 @@ def ui_entity(
             last = i
 
     return templates.TemplateResponse(
+        request,
         "entity.html",
         {
-            "request": request,
             "id": id,
             "props": props,
             "neighbors": neighbors,
