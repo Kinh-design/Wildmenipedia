@@ -1,4 +1,5 @@
 import hashlib
+import re
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode
@@ -147,12 +148,28 @@ def ui_search(
             pages_links.append({"label": i, "href": qp(i), "active": (i == p)})
             last = i
 
+    # Linkify footnotes like [1] to anchors in Sources list (#src-1)
+    summary_text = (hybrid or {}).get("answer")
+    sources_list = (hybrid or {}).get("sources", [])
+    summary_html = summary_text
+    if isinstance(summary_text, str) and sources_list:
+        def _repl(m: re.Match[str]) -> str:
+            try:
+                n = int(m.group(1))
+                if 1 <= n <= len(sources_list):
+                    return f'<a href="#src-{n}">[{n}]</a>'
+            except Exception:
+                pass
+            return m.group(0)
+        summary_html = re.sub(r"\[(\d+)\]", _repl, summary_text)
+
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "q": q,
-            "summary": (hybrid or {}).get("answer"),
+            "summary": summary_text,
+            "summary_html": summary_html,
             "facts": facts_slice,
             "vector_hits": (hybrid or {}).get("vector_hits", [])[:10],
             "sources": (hybrid or {}).get("sources", []),

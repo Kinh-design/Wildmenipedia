@@ -132,14 +132,14 @@
       <div class="grid">
         <div class="card">
           <div class="muted">Answer</div>
-          <div class="answer" style="margin-top:8px;">{{ summary }}</div>
+          <div class="answer" style="margin-top:8px;">{% if summary_html %}{{ summary_html|safe }}{% else %}{{ summary }}{% endif %}</div>
           {% if confidence %}<div style="margin-top:8px;"><span class="chip">confidence: {{ confidence }}</span></div>{% endif %}
           {% if sources %}
           <div style="margin-top:10px;">
             <div class="chip">Sources</div>
             <ul class="hits">
               {% for s in sources %}
-              <li><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a>{% if s.engine %} <span class="muted">({{ s.engine }})</span>{% endif %}</li>
+              <li id="src-{{ loop.index }}"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a>{% if s.engine %} <span class="muted">({{ s.engine }})</span>{% endif %}</li>
               {% endfor %}
             </ul>
           </div>
