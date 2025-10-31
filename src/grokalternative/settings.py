@@ -16,6 +16,14 @@ class Settings(BaseSettings):
 
     ENV: str = "dev"
 
+    # Scraper toggles (optional dependencies are not required if disabled)
+    SCRAPER_ENABLE_HTTPX: bool = True
+    SCRAPER_ENABLE_CLOUDSCRAPER: bool = False
+    SCRAPER_ENABLE_SCRAPY: bool = False
+    SCRAPER_ENABLE_CRAWL4AI: bool = False
+    SCRAPER_ENABLE_CRAWLEE: bool = False
+    SCRAPER_ENABLE_FIRECRAWL: bool = False
+
     class Config:
         env_file = ".env"
 

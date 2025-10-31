@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from .settings import get_settings
+
 UA_LIST = [
     # A few common desktop/mobile UAs to avoid trivial blocks
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36",
@@ -246,7 +248,22 @@ def realtime_fetch(
     nutch, crawlee, crawl4ai, firecrawl, botasaurus). When unavailable, we fall
     back to httpx.
     """
+    settings = get_settings()
     out: List[Dict[str, Any]] = []
+
+    def _enabled(name: str) -> bool:
+        try:
+            return bool({
+                "httpx": settings.SCRAPER_ENABLE_HTTPX,
+                "requests": settings.SCRAPER_ENABLE_HTTPX,
+                "cloudscraper": settings.SCRAPER_ENABLE_CLOUDSCRAPER,
+                "scrapy": settings.SCRAPER_ENABLE_SCRAPY,
+                "crawl4ai": settings.SCRAPER_ENABLE_CRAWL4AI,
+                "crawlee": settings.SCRAPER_ENABLE_CRAWLEE,
+                "firecrawl": settings.SCRAPER_ENABLE_FIRECRAWL,
+            }[name])
+        except Exception:
+            return False
     for u in urls:
         u = (u or "").strip()
         if not u:
@@ -254,29 +271,47 @@ def realtime_fetch(
         res: Optional[FetchResult] = None
         # Choose engine
         if strategy == "cloudscraper":
-            res = _fetch_cloudscraper(u, timeout=timeout)
-            if res is None:
+            res = _fetch_cloudscraper(u, timeout=timeout) if _enabled("cloudscraper") else None
+            if res is None and _enabled("httpx"):
                 res = _fetch_requests(u, timeout=timeout)
         elif strategy == "scrapy":
-            res = _fetch_scrapy(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+            res = _fetch_scrapy(u, timeout=timeout) if _enabled("scrapy") else None
+            if res is None and _enabled("httpx"):
+                res = _fetch_requests(u, timeout=timeout)
         elif strategy == "crawl4ai":
-            res = _fetch_crawl4ai(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+            res = _fetch_crawl4ai(u, timeout=timeout) if _enabled("crawl4ai") else None
+            if res is None and _enabled("httpx"):
+                res = _fetch_requests(u, timeout=timeout)
         elif strategy == "crawlee":
-            res = _fetch_crawlee(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+            res = _fetch_crawlee(u, timeout=timeout) if _enabled("crawlee") else None
+            if res is None and _enabled("httpx"):
+                res = _fetch_requests(u, timeout=timeout)
         elif strategy == "firecrawl":
-            res = _fetch_firecrawl(u, timeout=timeout) or _fetch_requests(u, timeout=timeout)
+            res = _fetch_firecrawl(u, timeout=timeout) if _enabled("firecrawl") else None
+            if res is None and _enabled("httpx"):
+                res = _fetch_requests(u, timeout=timeout)
         elif strategy in ("httpx", "requests"):
-            res = _fetch_requests(u, timeout=timeout)
+            res = _fetch_requests(u, timeout=timeout) if _enabled("httpx") else None
         else:  # auto
             # Try multiple adapters in order, fallback to httpx
-            res = (
-                _fetch_cloudscraper(u, timeout=timeout)
-                or _fetch_crawl4ai(u, timeout=timeout)
-                or _fetch_crawlee(u, timeout=timeout)
-                or _fetch_firecrawl(u, timeout=timeout)
-                or _fetch_scrapy(u, timeout=timeout)
-                or _fetch_requests(u, timeout=timeout)
-            )
+            res = None
+            order = [
+                ("cloudscraper", _fetch_cloudscraper),
+                ("crawl4ai", _fetch_crawl4ai),
+                ("crawlee", _fetch_crawlee),
+                ("firecrawl", _fetch_firecrawl),
+                ("scrapy", _fetch_scrapy),
+                ("httpx", _fetch_requests),
+            ]
+            for name, func in order:
+                if not _enabled(name):
+                    continue
+                if name == "httpx":
+                    res = func(u, timeout=timeout)
+                else:
+                    res = func(u, timeout=timeout)
+                if res is not None:
+                    break
 
         if summarize and res and res.ok and (res.text or "").strip():
             try:
