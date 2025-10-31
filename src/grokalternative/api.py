@@ -88,7 +88,7 @@ def ui_search(
                 "facts_next": None,
             },
         )
-    pipe = run_pipeline(q)
+    pipe = run_pipeline(q, tone=tone, length=length, audience=audience, timeframe=timeframe)
     # Optional real-time fetch
     web_docs = []
     raw_urls = [u.strip() for u in (urls or "").split(",") if u.strip()]
@@ -97,7 +97,14 @@ def ui_search(
             web_docs = realtime_fetch(raw_urls, strategy=strategy, summarize=bool(summarize), max_sentences=int(max_sentences or 5))
         except Exception:
             web_docs = []
-    hybrid = hybrid_answer(q, web_docs=web_docs)
+    hybrid = hybrid_answer(
+        q,
+        web_docs=web_docs,
+        tone=tone,
+        length=length,
+        audience=audience,
+        timeframe=timeframe,
+    )
     facts = (hybrid or {}).get("facts", [])
     total = len(facts)
     p = max(1, int(page or 1))

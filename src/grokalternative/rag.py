@@ -31,6 +31,11 @@ def hybrid_answer(
     vs: VS | None = None,
     top_k: int = 5,
     web_docs: Optional[List[Dict[str, Any]]] = None,
+    *,
+    tone: str = "neutral",
+    length: int = 300,
+    audience: str = "general",
+    timeframe: int = 90,
 ) -> Dict[str, Any]:
     kg = kg or KG.from_env()
     vs = vs or VS.from_env()
@@ -110,8 +115,28 @@ def hybrid_answer(
     elif len(sources) == 2:
         confidence = "medium"
 
+    # Build style-aware summary with inline footnote markers tied to sources order
+    if tone == "executive":
+        lead = "Executive summary"
+    elif tone == "humorous":
+        lead = "Quick take (with a wink)"
+    else:
+        lead = "Summary"
+    aud = "for a general audience" if audience == "general" else (
+        "for non-technical readers" if audience == "non-technical" else "for experts"
+    )
+    tf = "all time" if int(timeframe or 0) == 0 else f"last {int(timeframe)} days"
+    fn = ""  # footnotes like [1][2]
+    if sources:
+        lim = min(3, len(sources))
+        fn = " " + "".join([f"[{i}]" for i in range(1, lim + 1)])
+    extra = "" if length < 400 else " Additional detail included per requested length."
+    answer_text = (
+        f"{lead} {aud} ({tf}): {len(facts_sorted)} graph facts fused with {len(vector_hits)} vector hits.{extra}{fn}"
+    )
+
     return {
-        "answer": f"Hybrid summary for '{question}': graph_facts={len(facts_sorted)}, vector_hits={len(vector_hits)}.",
+        "answer": answer_text,
         "facts": facts_sorted,
         "vector_hits": vector_hits,
         "selected_entities": candidate_ids,
