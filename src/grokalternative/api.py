@@ -1,7 +1,9 @@
 import hashlib
+import json
 import re
+import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
@@ -11,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from .agents.orchestrator import run_pipeline
 from .embeddings import Embedder
 from .ingest import ingest_from_dbpedia, ingest_from_wikidata
+from .llm import stream_answer
 from .rag import graphrag_answer, hybrid_answer
 from .scrape import realtime_fetch
 from .settings import get_settings
@@ -19,6 +22,9 @@ from .stores import KG, VS
 app = FastAPI(title="Wildmenipedia API", version="0.1.0")
 
 templates = Jinja2Templates(directory=str((Path(__file__).parent / "templates").resolve()))
+
+# In-memory chat store (best-effort; not durable). Keys are session ids.
+CHAT_STORE: Dict[str, List[Dict[str, str]]] = {}
 
 
 @app.get("/health")
@@ -53,6 +59,23 @@ def ui_home(request: Request) -> HTMLResponse:
             "entities": [],
         },
     )
+
+
+@app.get("/chat", response_class=HTMLResponse)
+def ui_chat(request: Request) -> HTMLResponse:
+    settings = get_settings()
+    sid = request.cookies.get("sid") or uuid.uuid4().hex
+    history = CHAT_STORE.get(sid) or []
+    ctx = {
+        "messages": history,
+        "provider": settings.LLM_PROVIDER,
+        "model": settings.LLM_MODEL,
+        "sid": sid,
+    }
+    resp = templates.TemplateResponse(request, "chat.html", ctx)
+    # Ensure user keeps a session id for history
+    resp.set_cookie("sid", sid, httponly=False, samesite="lax")
+    return resp
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -209,6 +232,29 @@ def ui_search(
             "timeframe": timeframe,
         },
     )
+
+
+@app.get("/chat/stream")
+def chat_stream(request: Request, q: str, tone: str = "neutral", length: int = 300, audience: str = "general", timeframe: int = 90):
+    """SSE stream of LLM answer; also maintains in-memory conversation history per session."""
+    sid = request.cookies.get("sid") or uuid.uuid4().hex
+    CHAT_STORE.setdefault(sid, [])
+    # Record user message
+    CHAT_STORE[sid].append({"role": "user", "content": q})
+
+    def _gen():
+        try:
+            chunks: List[str] = []
+            for piece in stream_answer(q, facts=[], tone=tone, length=length, audience=audience, timeframe=timeframe):
+                chunks.append(piece)
+                yield f"data: {json.dumps({'delta': piece})}\n\n"
+            full = "".join(chunks).strip()
+            CHAT_STORE[sid].append({"role": "assistant", "content": full})
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        yield "event: end\ndata: done\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
 
 
 @app.get("/entity", response_class=HTMLResponse)

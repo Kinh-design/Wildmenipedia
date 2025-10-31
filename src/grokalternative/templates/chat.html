@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wildmenipedia • Chat</title>
+    <style>
+      :root { --accent:#00e5ff; }
+      body[data-theme="dark"]{
+        --bg:#0b0f14; --panel:#0f141a; --muted:#9aa4af; --text:#e6edf3; --chip:#19212a; --border:#1b2733;
+      }
+      body[data-theme="light"]{
+        --bg:#fbfbfc; --panel:#ffffff; --muted:#5f6b76; --text:#0f1419; --chip:#eef2f6; --border:#e5e9ef;
+      }
+      html, body { height: 100%; }
+      body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+      .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+      .brand { display:flex; align-items:center; gap:10px; }
+      .logo { width:28px; height:28px; border-radius:6px; background: linear-gradient(135deg,#00e5ff,#8a2be2); box-shadow:0 0 24px rgba(0,229,255,0.35); }
+      .title { font-weight:700; letter-spacing:0.3px; }
+      .muted { color: var(--muted); }
+      .theme { margin-left:auto; color: var(--muted); font-size:12px; }
+      .chat { margin-top:16px; display:flex; gap:16px; }
+      .panel { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-height: 420px; }
+      .msg { padding:8px 10px; border-radius:10px; margin:8px 0; max-width: 80%; }
+      .user { background: var(--chip); margin-left:auto; }
+      .assistant { background: transparent; border:1px solid var(--border); }
+      .composer { display:flex; gap:8px; margin-top:12px; }
+      .composer input[type="text"]{ flex:1; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; }
+      .btn { background: var(--accent); color:#001015; border: none; padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
+      .btn.secondary { background: transparent; color: var(--text); border:1px solid var(--border); }
+      details.settings { background: var(--panel); border:1px dashed var(--border); border-radius: 10px; padding:8px; margin-top:12px; }
+    </style>
+    <script>
+      (function(){
+        const pref = localStorage.getItem('theme') || 'dark';
+        document.addEventListener('DOMContentLoaded', ()=>{
+          document.body.dataset.theme = pref;
+          const t = document.getElementById('theme');
+          if (t) t.checked = pref === 'dark';
+          renderHistory();
+        });
+        window.toggleTheme = function(cb){
+          const theme = cb.checked ? 'dark' : 'light';
+          document.body.dataset.theme = theme;
+          localStorage.setItem('theme', theme);
+        }
+      })();
+
+      function renderHistory(){
+        const list = document.getElementById('thread');
+        if(!list) return;
+        list.innerHTML = '';
+        const history = JSON.parse(localStorage.getItem('wm_chat_'+SID) || '[]');
+        for(const m of history){
+          const div = document.createElement('div');
+          div.className = 'msg '+(m.role==='user'?'user':'assistant');
+          div.textContent = m.content;
+          list.appendChild(div);
+        }
+      }
+
+      function save(role, content){
+        const key = 'wm_chat_'+SID;
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        arr.push({role, content});
+        localStorage.setItem(key, JSON.stringify(arr.slice(-100)));
+      }
+
+      function sendMsg(){
+        const inp = document.getElementById('q');
+        const q = (inp.value||'').trim();
+        if(!q) return;
+        save('user', q); renderHistory();
+        inp.value = '';
+        const out = document.getElementById('live');
+        out.textContent = '';
+        const params = new URLSearchParams({ q, tone: document.getElementById('tone').value, length: document.getElementById('length').value, audience: document.getElementById('audience').value, timeframe: document.getElementById('timeframe').value });
+        const es = new EventSource('/chat/stream?'+params.toString());
+        es.onmessage = (ev)=>{
+          try{
+            const data = JSON.parse(ev.data||'{}');
+            if(data.delta){ out.textContent += data.delta; }
+            if(data.error){ out.textContent += ' [error: '+data.error+']'; }
+          }catch(e){}
+        };
+        es.addEventListener('end', ()=>{
+          save('assistant', out.textContent.trim()); renderHistory(); try{ es.close(); }catch(e){}
+        });
+      }
+    </script>
+  </head>
+  <body data-theme="dark">
+    <script>const SID = {{ sid|tojson|safe }};</script>
+    <div class="container">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="title">Wildmenipedia Chat</div>
+          <div class="muted">Streaming Grok-style chat with history</div>
+        </div>
+        <label class="theme"><input id="theme" type="checkbox" onchange="toggleTheme(this)" checked> Dark</label>
+      </div>
+
+      <details class="settings">
+        <summary class="btn secondary" style="display:inline-block;">Settings</summary>
+        <div class="muted" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap;">
+          <div>Provider: <span class="chip" style="background:var(--chip); padding:3px 8px; border-radius:999px;">{{ provider }}</span></div>
+          <div>Model: <span class="chip" style="background:var(--chip); padding:3px 8px; border-radius:999px;">{{ model }}</span></div>
+          <label> Tone
+            <select id="tone" style="margin-left:6px;">
+              {% for t in ['neutral','humorous','executive'] %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label> Length
+            <input id="length" type="number" min="50" max="2000" step="50" value="300" style="margin-left:6px; width:100px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px;" />
+          </label>
+          <label> Audience
+            <select id="audience" style="margin-left:6px;">
+              {% for a in ['general','non-technical','expert'] %}
+                <option value="{{ a }}">{{ a }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label> Timeframe
+            <select id="timeframe" style="margin-left:6px;">
+              {% for tf in [7,30,90,365,0] %}
+                <option value="{{ tf }}">{{ 'all' if tf == 0 else ('last ' ~ tf ~ ' days') }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <div class="chat">
+        <div class="panel">
+          <div id="thread"></div>
+          <div class="assistant msg" id="live" style="white-space: pre-wrap;"></div>
+          <div class="composer">
+            <input id="q" type="text" placeholder="Ask anything…" />
+            <button class="btn" onclick="sendMsg()">Send</button>
+            <a class="btn secondary" href="/">Search</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
