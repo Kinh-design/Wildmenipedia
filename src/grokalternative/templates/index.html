@@ -147,7 +147,7 @@
           {% if entities %}
           <div style="margin-top:10px;">
             {% for e in entities %}
-            <a class="chip" href="/entity?id={{ e|urlencode }}&page_size={{ facts_page_size or 15 }}">{{ e }}</a>
+            <a class="chip" href="/entity?id={{ e|urlencode }}&page_size={{ facts_page_size or 15 }}&urls={{ (urls or '')|urlencode }}&strategy={{ strategy or 'auto' }}&summarize={{ summarize }}&max_sentences={{ max_sentences or 5 }}&tone={{ tone or 'neutral' }}&length={{ length or 300 }}&audience={{ audience or 'general' }}&timeframe={{ timeframe or 90 }}">{{ e }}</a>
             {% endfor %}
           </div>
           {% endif %}

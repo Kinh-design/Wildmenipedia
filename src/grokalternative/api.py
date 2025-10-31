@@ -179,7 +179,20 @@ def ui_search(
 
 
 @app.get("/entity", response_class=HTMLResponse)
-def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> HTMLResponse:
+def ui_entity(
+    request: Request,
+    id: str,
+    page: int = 1,
+    page_size: int = 15,
+    urls: str = "",
+    strategy: str = "auto",
+    summarize: bool = True,
+    max_sentences: int = 5,
+    tone: str = "neutral",
+    length: int = 300,
+    audience: str = "general",
+    timeframe: int = 90,
+) -> HTMLResponse:
     kg = KG.from_env()
     props: Dict[str, Any] = {}
     neighbors: list[dict[str, Any]] = []
@@ -241,7 +254,20 @@ def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> 
     ps = max(1, min(50, int(page_size or 15)))
     page_count = max(1, (total + ps - 1) // ps) if total else 1
     def qp(new_page: int) -> str:
-        return f"/entity?{urlencode({'id': id, 'page': new_page, 'page_size': ps})}"
+        params = {
+            'id': id,
+            'page': new_page,
+            'page_size': ps,
+            'urls': urls,
+            'strategy': strategy,
+            'summarize': summarize,
+            'max_sentences': max_sentences,
+            'tone': tone,
+            'length': length,
+            'audience': audience,
+            'timeframe': timeframe,
+        }
+        return f"/entity?{urlencode(params)}"
 
     # Numbered pagination with ellipsis windowing
     neighbors_links: list[dict[str, Any]] = []
@@ -277,6 +303,14 @@ def ui_entity(request: Request, id: str, page: int = 1, page_size: int = 15) -> 
             "related": related,
             "recommended": rec_q,
             "neighbors_links": neighbors_links,
+            "urls": urls,
+            "strategy": strategy,
+            "summarize": summarize,
+            "max_sentences": max_sentences,
+            "tone": tone,
+            "length": length,
+            "audience": audience,
+            "timeframe": timeframe,
         },
     )
 
