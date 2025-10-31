@@ -64,6 +64,10 @@ def ui_search(
     strategy: str = "auto",
     summarize: bool = True,
     max_sentences: int = 5,
+    tone: str = "neutral",
+    length: int = 300,
+    audience: str = "general",
+    timeframe: int = 90,
 ) -> HTMLResponse:
     q = (q or "").strip()
     if not q:
@@ -104,7 +108,20 @@ def ui_search(
     facts_slice = facts[start:end]
 
     def qp(new_page: int) -> str:
-        return f"/search?{urlencode({'q': q, 'page': new_page, 'page_size': ps})}"
+        params = {
+            'q': q,
+            'page': new_page,
+            'page_size': ps,
+            'urls': urls,
+            'strategy': strategy,
+            'summarize': summarize,
+            'max_sentences': max_sentences,
+            'tone': tone,
+            'length': length,
+            'audience': audience,
+            'timeframe': timeframe,
+        }
+        return f"/search?{urlencode(params)}"
 
     # Build numbered pagination with ellipsis windowing (especially for 100+ pages)
     pages_links: list[dict[str, Any]] = []
@@ -146,6 +163,10 @@ def ui_search(
             "strategy": strategy,
             "summarize": summarize,
             "max_sentences": max_sentences,
+            "tone": tone,
+            "length": length,
+            "audience": audience,
+            "timeframe": timeframe,
         },
     )
 

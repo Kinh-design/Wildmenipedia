@@ -89,6 +89,35 @@
       <form class="search" action="/search" method="get">
         <input type="text" name="q" placeholder="Ask about an entity, concept, or relationship…" value="{{ q }}" />
         <input type="text" name="urls" placeholder="Comma-separated URLs (optional)" value="{{ urls or '' }}" style="flex:1; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px;" />
+        <details style="margin-left:6px;">
+          <summary class="btn secondary" style="display:inline-block;">Advanced</summary>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; padding:8px; border:1px dashed var(--border); border-radius:8px;">
+            <label class="muted">Tone
+              <select name="tone" style="margin-left:6px;">
+                {% for t in ['neutral','humorous','executive'] %}
+                  <option value="{{ t }}" {% if (tone or 'neutral') == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="muted">Length (words)
+              <input type="number" min="50" max="2000" step="50" name="length" value="{{ length or 300 }}" style="margin-left:6px; width:100px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px;" />
+            </label>
+            <label class="muted">Audience
+              <select name="audience" style="margin-left:6px;">
+                {% for a in ['general','non-technical','expert'] %}
+                  <option value="{{ a }}" {% if (audience or 'general') == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="muted">Timeframe
+              <select name="timeframe" style="margin-left:6px;">
+                {% for tf in [7,30,90,365,0] %}
+                  <option value="{{ tf }}" {% if (timeframe or 90) == tf %}selected{% endif %}>{{ 'all' if tf == 0 else ('last ' ~ tf ~ ' days') }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+        </details>
         <label class="muted" style="align-self:center;">Page size</label>
         <select name="page_size" style="background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;" onchange="this.form.submit()">
           {% for sz in [10,15,25,50] %}
@@ -172,6 +201,14 @@
           <form method="get" action="/search" style="margin-left:auto;">
             <input type="hidden" name="q" value="{{ q }}" />
             <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="urls" value="{{ urls or '' }}" />
+            <input type="hidden" name="strategy" value="{{ strategy or 'auto' }}" />
+            <input type="hidden" name="summarize" value="{{ summarize }}" />
+            <input type="hidden" name="max_sentences" value="{{ max_sentences or 5 }}" />
+            <input type="hidden" name="tone" value="{{ tone or 'neutral' }}" />
+            <input type="hidden" name="length" value="{{ length or 300 }}" />
+            <input type="hidden" name="audience" value="{{ audience or 'general' }}" />
+            <input type="hidden" name="timeframe" value="{{ timeframe or 90 }}" />
             <label class="muted" style="margin-right:6px;">Page size</label>
             <select name="page_size" onchange="this.form.submit()">
               {% for sz in [10,15,25,50] %}
