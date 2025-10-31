@@ -13,6 +13,7 @@ class VerifiedTriple(TypedDict):
 class VerifiedDraft(TypedDict):
     triples: List[VerifiedTriple]
     sources: List[str]
+    query: str
 
 
 def run(draft: Dict) -> VerifiedDraft:
@@ -24,4 +25,4 @@ def run(draft: Dict) -> VerifiedDraft:
             "object": t["object"],
             "confidence": 0.85,
         })
-    return {"triples": triples, "sources": draft.get("sources", [])}
+    return {"triples": triples, "sources": draft.get("sources", []), "query": draft.get("query", "")}

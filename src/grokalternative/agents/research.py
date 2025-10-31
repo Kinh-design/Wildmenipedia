@@ -6,6 +6,7 @@ from typing import Dict, List, TypedDict
 class Draft(TypedDict):
     triples: List[Dict]
     sources: List[str]
+    query: str
 
 
 def run(query: str) -> Draft:
@@ -14,5 +15,6 @@ def run(query: str) -> Draft:
         "triples": [
             {"subject": "wd:Quantum_entanglement", "predicate": "is_a", "object": "Concept"}
         ],
-        "sources": ["https://www.wikidata.org/", "https://en.wikipedia.org/"]
+        "sources": ["https://www.wikidata.org/", "https://en.wikipedia.org/"],
+        "query": query,
     }

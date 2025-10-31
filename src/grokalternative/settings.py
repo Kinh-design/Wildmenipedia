@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
 
     LLM_PROVIDER: str = "local"
-    LLM_MODEL: str = "llama3"
+    LLM_MODEL: str = "grok-2-latest"
+    XAI_API_KEY: str | None = None
 
     ENV: str = "dev"
 
