@@ -93,7 +93,7 @@ def generate_answer(
     )
 
     # Single provider: Google Gemini (Generative Language API)
-    if s.__dict__.get("GOOGLE_API_KEY"):
+    if s.__dict__.get("GOOGLE_API_KEY") and bool(getattr(s, "LLM_ENABLE_REMOTE", True)):
         api_key = str(getattr(s, "GOOGLE_API_KEY"))
         try:
             gmodel = model if model.startswith("gemini-") else f"gemini-{model}" if model.startswith("2") else model

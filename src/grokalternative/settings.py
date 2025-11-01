@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Single-model configuration (Google Gemini only)
     LLM_MODEL: str = "gemini-2.5-pro"
     GOOGLE_API_KEY: str | None = None
+    LLM_ENABLE_REMOTE: bool = True
 
     ENV: str = "dev"
 

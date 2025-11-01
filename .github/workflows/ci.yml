@@ -9,6 +9,10 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    env:
+      LLM_MODEL: gemini-2.5-pro
+      LLM_ENABLE_REMOTE: "false"  # avoid network calls in CI
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
