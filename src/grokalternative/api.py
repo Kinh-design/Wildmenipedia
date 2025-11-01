@@ -1,13 +1,15 @@
 import hashlib
 import json
+import logging
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from .agents.orchestrator import run_pipeline
@@ -21,6 +23,179 @@ from .stores import KG, VS
 
 app = FastAPI(title="Wildmenipedia API", version="0.1.0")
 
+# ---------------- Observability: logging, metrics, error tracking ---------------
+
+# Metrics (optional)
+try:
+    from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        CollectorRegistry,
+        Counter,
+        Histogram,
+        generate_latest,
+    )
+
+    _PROM_REGISTRY = CollectorRegistry()
+    REQUEST_COUNT = Counter(
+        "http_requests_total",
+        "Total HTTP requests",
+        ["method", "path", "status"],
+        registry=_PROM_REGISTRY,
+    )
+    REQUEST_LATENCY = Histogram(
+        "http_request_duration_seconds",
+        "HTTP request latency in seconds",
+        ["method", "path"],
+        registry=_PROM_REGISTRY,
+        buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
+    )
+    _METRICS_AVAILABLE = True
+except Exception:  # pragma: no cover
+    REQUEST_COUNT = None  # type: ignore
+    REQUEST_LATENCY = None  # type: ignore
+    _PROM_REGISTRY = None  # type: ignore
+    _METRICS_AVAILABLE = False
+
+
+def _configure_logging() -> None:
+    s = get_settings()
+    level = getattr(logging, (s.LOG_LEVEL or "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=level, format="%(message)s")
+
+    if (s.LOG_FORMAT or "plain").lower() == "json":
+        class JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                obj = {
+                    "ts": int(time.time() * 1000),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                }
+                if record.exc_info:
+                    obj["exc_info"] = self.formatException(record.exc_info)
+                return json.dumps(obj, ensure_ascii=False)
+
+        for h in logging.getLogger().handlers:
+            try:
+                h.setFormatter(JsonFormatter())
+            except Exception:
+                continue
+
+
+def _install_metrics_middleware(app: FastAPI) -> None:
+    s = get_settings()
+    if not (_METRICS_AVAILABLE and bool(s.METRICS_ENABLED)):
+        return
+
+    @app.middleware("http")
+    async def _metrics_mw(request: Request, call_next):
+        path = request.url.path
+        method = request.method
+        if path == "/metrics":
+            return await call_next(request)
+        start = time.perf_counter()
+        resp = await call_next(request)
+        dur = time.perf_counter() - start
+        try:
+            REQUEST_LATENCY.labels(method=method, path=path).observe(dur)
+            REQUEST_COUNT.labels(method=method, path=path, status=str(resp.status_code)).inc()
+        except Exception:
+            pass
+        return resp
+
+    @app.get("/metrics")
+    def metrics() -> Response:
+        try:
+            data = generate_latest(_PROM_REGISTRY)
+            return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+        except Exception:
+            return PlainTextResponse("metrics unavailable", status_code=503)
+
+
+def _configure_sentry() -> None:
+    s = get_settings()
+    dsn = s.SENTRY_DSN or ""
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+        sentry_sdk.init(dsn=dsn, integrations=[FastApiIntegration()])
+    except Exception:  # pragma: no cover
+        pass
+
+
+# Scheduler (optional)
+SCHEDULER = None
+try:
+    import apscheduler.schedulers.background as _aps_bg  # type: ignore[import-untyped]
+    import apscheduler.triggers.cron as _aps_cron  # type: ignore[import-untyped]
+    _SCHED_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _SCHED_AVAILABLE = False
+
+
+def _crawl_once() -> None:
+    s = get_settings()
+    seeds = [u.strip() for u in (s.CRAWL_SEEDS or "").split(",") if u.strip()]
+    if not seeds:
+        return
+    try:
+        realtime_fetch(seeds, strategy="auto", summarize=True, max_sentences=5)
+    except Exception:
+        pass
+
+
+def _index_once() -> None:
+    s = get_settings()
+    ids = [i.strip() for i in (s.INDEX_IDS or "").split(",") if i.strip()]
+    for eid in ids:
+        try:
+            _index_single(id=eid, include_label=True, include_aliases=True)
+        except Exception:
+            continue
+
+
+def _start_scheduler() -> None:
+    global SCHEDULER
+    s = get_settings()
+    if not (bool(s.ENABLE_SCHEDULER) and _SCHED_AVAILABLE):
+        return
+    if SCHEDULER is not None:
+        return
+    try:
+        SCHEDULER = _aps_bg.BackgroundScheduler()
+        SCHEDULER.add_job(_crawl_once, _aps_cron.CronTrigger.from_crontab(s.CRAWL_CRON), id="crawl_job", replace_existing=True)
+        SCHEDULER.add_job(_index_once, _aps_cron.CronTrigger.from_crontab(s.INDEX_CRON), id="index_job", replace_existing=True)
+        SCHEDULER.start()
+    except Exception:
+        SCHEDULER = None
+
+
+def _stop_scheduler() -> None:
+    global SCHEDULER
+    try:
+        if SCHEDULER is not None:
+            SCHEDULER.shutdown(wait=False)
+    except Exception:
+        pass
+    finally:
+        SCHEDULER = None
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _configure_logging()
+    _install_metrics_middleware(app)
+    _configure_sentry()
+    _start_scheduler()
+
+
+@app.on_event("shutdown")
+def _on_shutdown() -> None:
+    _stop_scheduler()
+
 templates = Jinja2Templates(directory=str((Path(__file__).parent / "templates").resolve()))
 
 # In-memory chat store (best-effort; not durable). Keys are session ids.
@@ -28,14 +203,38 @@ CHAT_STORE: Dict[str, List[Dict[str, str]]] = {}
 
 
 @app.get("/health")
-def health() -> dict:
+def health(deep: bool = False) -> dict:
     settings = get_settings()
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "neo4j": bool(settings.NEO4J_URL),
         "qdrant": bool(settings.QDRANT_HOST),
         "env": settings.ENV,
     }
+    if deep:
+        try:
+            kg = KG.from_env()
+            payload["neo4j_connect"] = bool(kg is not None)
+        except Exception:
+            payload["neo4j_connect"] = False
+        try:
+            vs = VS.from_env()
+            payload["qdrant_connect"] = bool(vs is not None)
+        except Exception:
+            payload["qdrant_connect"] = False
+    return payload
+
+
+@app.post("/jobs/run/crawl")
+def run_crawl(background_tasks: BackgroundTasks) -> dict:
+    background_tasks.add_task(_crawl_once)
+    return {"ok": True, "accepted": True, "job": "crawl"}
+
+
+@app.post("/jobs/run/index")
+def run_index(background_tasks: BackgroundTasks) -> dict:
+    background_tasks.add_task(_index_once)
+    return {"ok": True, "accepted": True, "job": "index"}
 
 
 @app.get("/ask")

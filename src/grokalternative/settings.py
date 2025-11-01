@@ -17,6 +17,19 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str | None = None
     LLM_ENABLE_REMOTE: bool = True
 
+    # Observability
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "plain"  # plain | json
+    METRICS_ENABLED: bool = True
+    SENTRY_DSN: str | None = None
+
+    # Scheduler / Background jobs
+    ENABLE_SCHEDULER: bool = False
+    CRAWL_CRON: str = "0 * * * *"   # hourly
+    INDEX_CRON: str = "30 * * * *"   # hourly offset
+    CRAWL_SEEDS: str = ""           # comma-separated URLs
+    INDEX_IDS: str = ""             # comma-separated entity IDs
+
     ENV: str = "dev"
 
     # Scraper toggles (optional dependencies are not required if disabled)
