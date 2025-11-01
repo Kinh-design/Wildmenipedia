@@ -68,7 +68,6 @@ def ui_chat(request: Request) -> HTMLResponse:
     history = CHAT_STORE.get(sid) or []
     ctx = {
         "messages": history,
-        "provider": settings.LLM_PROVIDER,
         "model": settings.LLM_MODEL,
         "sid": sid,
     }

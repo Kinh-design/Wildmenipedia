@@ -12,12 +12,8 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
 
-    LLM_PROVIDER: str = "local"
-    LLM_MODEL: str = "grok-2-latest"
-    XAI_API_KEY: str | None = None
-    OPENAI_API_KEY: str | None = None
-    ANTHROPIC_API_KEY: str | None = None
-    GROQ_API_KEY: str | None = None
+    # Single-model configuration (Google Gemini only)
+    LLM_MODEL: str = "gemini-2.5-pro"
     GOOGLE_API_KEY: str | None = None
 
     ENV: str = "dev"

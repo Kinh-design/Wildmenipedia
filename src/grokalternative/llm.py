@@ -63,8 +63,9 @@ def generate_answer(
     If no remote LLM is configured, returns a lightweight locally rendered answer.
     """
     s = get_settings()
-    provider = (s.LLM_PROVIDER or "local").lower()
-    model = s.LLM_MODEL or "grok-2-latest"
+    # Single provider (Gemini). Normalize model formatting like "gemini 2.5 pro" -> "gemini-2.5-pro"
+    raw_model = s.LLM_MODEL or "gemini-2.5-pro"
+    model = "-".join(str(raw_model).strip().split())
 
     # Build compact facts list for prompt
     facts = facts or []
@@ -91,131 +92,12 @@ def generate_answer(
         "Compose a single-paragraph answer."
     )
 
-    # Provider: xAI Grok (OpenAI-compatible)
-    if provider in ("xai", "grok") and (s.__dict__.get("XAI_API_KEY") or ""):
-        api_key = str(getattr(s, "XAI_API_KEY"))
-        try:
-            with httpx.Client() as client:
-                resp = _request_with_retries(
-                    client,
-                    "POST",
-                    "https://api.x.ai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": sys},
-                            {"role": "user", "content": user},
-                        ],
-                        "temperature": 0.3,
-                    },
-                )
-            data = resp.json()
-            msg = ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
-            if isinstance(msg, str) and msg.strip():
-                return _clip_words(msg.strip(), max(50, int(length)))
-        except Exception:
-            pass
-
-    # Provider: OpenAI
-    if provider in ("openai",) and (s.__dict__.get("OPENAI_API_KEY") or ""):
-        api_key = str(getattr(s, "OPENAI_API_KEY"))
-        try:
-            with httpx.Client() as client:
-                resp = _request_with_retries(
-                    client,
-                    "POST",
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": sys},
-                            {"role": "user", "content": user},
-                        ],
-                        "temperature": 0.3,
-                    },
-                )
-            data = resp.json()
-            msg = ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
-            if isinstance(msg, str) and msg.strip():
-                return _clip_words(msg.strip(), max(50, int(length)))
-        except Exception:
-            pass
-
-    # Provider: Anthropic
-    if provider in ("anthropic",) and (s.__dict__.get("ANTHROPIC_API_KEY") or ""):
-        api_key = str(getattr(s, "ANTHROPIC_API_KEY"))
-        try:
-            with httpx.Client() as client:
-                resp = _request_with_retries(
-                    client,
-                    "POST",
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "max_tokens": 512,
-                        "system": sys,
-                        "messages": [{"role": "user", "content": user}],
-                    },
-                )
-            data = resp.json()
-            parts = (data.get("content") or [])
-            if parts and isinstance(parts[0], dict):
-                text = parts[0].get("text")
-                if isinstance(text, str) and text.strip():
-                    return _clip_words(text.strip(), max(50, int(length)))
-        except Exception:
-            pass
-
-    # Provider: Groq (OpenAI-compatible endpoint)
-    if provider in ("groq",) and (s.__dict__.get("GROQ_API_KEY") or ""):
-        api_key = str(getattr(s, "GROQ_API_KEY"))
-        try:
-            with httpx.Client() as client:
-                resp = _request_with_retries(
-                    client,
-                    "POST",
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": sys},
-                            {"role": "user", "content": user},
-                        ],
-                        "temperature": 0.3,
-                    },
-                )
-            data = resp.json()
-            msg = ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
-            if isinstance(msg, str) and msg.strip():
-                return _clip_words(msg.strip(), max(50, int(length)))
-        except Exception:
-            pass
-
-    # Provider: Google Gemini (Generative Language API)
-    if provider in ("gemini", "google") and (s.__dict__.get("GOOGLE_API_KEY") or ""):
+    # Single provider: Google Gemini (Generative Language API)
+    if s.__dict__.get("GOOGLE_API_KEY"):
         api_key = str(getattr(s, "GOOGLE_API_KEY"))
         try:
-            # Default to a Gemini model if not specified appropriately
-            gmodel = model if model.startswith("gemini-") else "gemini-1.5-flash"
+            gmodel = model if model.startswith("gemini-") else f"gemini-{model}" if model.startswith("2") else model
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{gmodel}:generateContent?key={api_key}"
-            # Compose request with system + user content
             body = {
                 "system_instruction": {"parts": [{"text": sys}]},
                 "contents": [
@@ -236,6 +118,8 @@ def generate_answer(
                         return _clip_words(text.strip(), max(50, int(length)))
         except Exception:
             pass
+
+    # (single provider path above); if no key or errors, fall back below
 
     # Fallback local render
     lead = "Executive summary" if tone == "executive" else ("Quick take (with a wink)" if tone == "humorous" else "Summary")
